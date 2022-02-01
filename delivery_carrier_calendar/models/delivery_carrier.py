@@ -26,10 +26,10 @@ class DeliveryCarrier(models.Model):
         lead_days = 0
 
         if safety_lead_days:
-            lead_days += safety_lead_days
+            lead_days = safety_lead_days
 
         if self.lead_time:
-            lead_days += self.lead_time
+            lead_days = self.lead_time
 
         day_dt = day_dt + relativedelta(days=lead_days)
 
