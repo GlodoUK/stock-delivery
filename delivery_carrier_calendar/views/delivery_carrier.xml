@@ -7,6 +7,7 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='company_id']" position="after">
                 <field name="carrier_calendar_id" />
+                <field name="lead_time"/>
             </xpath>
         </field>
     </record>

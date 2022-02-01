@@ -7,6 +7,11 @@ class DeliveryCarrier(models.Model):
     _inherit = "delivery.carrier"
 
     carrier_calendar_id = fields.Many2one("resource.calendar")
+    lead_time = fields.Integer(
+        string="Lead Time",
+        help="Lead time for this carrier, in days.",
+        default=0,
+    )
 
     def plan_days(
         self, day_dt, days=1, compute_leaves=True, domain=None, safety_lead_days=1
@@ -18,6 +23,9 @@ class DeliveryCarrier(models.Model):
 
         if safety_lead_days > 0:
             day_dt = day_dt + relativedelta(days=safety_lead_days)
+
+        if self.lead_time > 0:
+            day_dt = day_dt + relativedelta(days=self.lead_time)
 
         return self.carrier_calendar_id.plan_days(
             days, day_dt, compute_leaves=compute_leaves, domain=domain
