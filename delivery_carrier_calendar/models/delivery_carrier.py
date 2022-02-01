@@ -8,7 +8,7 @@ class DeliveryCarrier(models.Model):
 
     carrier_calendar_id = fields.Many2one("resource.calendar")
     lead_time = fields.Integer(
-        string="Lead Time",
+        string="Lead Days",
         help="Lead time for this carrier, in days.",
         default=0,
     )
