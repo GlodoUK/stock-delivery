@@ -27,7 +27,7 @@ class DeliveryCarrier(models.Model):
 
         if self.lead_time:
             lead_days += self.lead_time
-        else safety_lead_days:
+        elif safety_lead_days:
             lead_days += safety_lead_days
 
         if self.carrier_calendar_id:
