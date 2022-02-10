@@ -35,6 +35,4 @@ class DeliveryCarrier(models.Model):
                 days + lead_days, day_dt, compute_leaves=compute_leaves, domain=domain
             )
 
-        return day_dt
-
-
+        return day_dt + relativedelta(days=lead_days)
