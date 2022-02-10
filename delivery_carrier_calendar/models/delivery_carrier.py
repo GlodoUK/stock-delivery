@@ -25,17 +25,14 @@ class DeliveryCarrier(models.Model):
 
         lead_days = 0
 
-        if safety_lead_days:
-            lead_days = safety_lead_days
-
         if self.lead_time:
-            lead_days = self.lead_time
-
-        day_dt = day_dt + relativedelta(days=lead_days)
+            lead_days += self.lead_time
+        else safety_lead_days:
+            lead_days += safety_lead_days
 
         if self.carrier_calendar_id:
             return self.carrier_calendar_id.plan_days(
-                days, day_dt, compute_leaves=compute_leaves, domain=domain
+                days + lead_days, day_dt, compute_leaves=compute_leaves, domain=domain
             )
 
         return day_dt
