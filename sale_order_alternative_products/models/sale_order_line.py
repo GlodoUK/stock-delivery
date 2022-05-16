@@ -16,8 +16,8 @@ class SaleOrderLine(models.Model):
             "target": "new",
             "context": {
                 "default_product_id": self.product_id.id,
-                "default_alternatives": self.product_id.stock_backup_ids.ids,
-                "default_order_line": self.id,
+                "default_alternative_ids": self.product_id.stock_backup_ids.ids,
+                "default_order_line_id": self.id,
                 "default_demand": self.product_uom_qty,
             },
         }
