@@ -2,7 +2,7 @@
     "name": "product_commingle_stock",
     "summary": """product_commingle <-> stock glue module""",
     "author": "Glo Networks",
-    "website": "https://github.com/OCA/stock-delivery",
+    "website": "https://github.com/GlodoUK/stock-delivery",
     "category": "Uncategorized",
     "version": "15.0.1.0.0",
     "depends": ["product_commingle", "stock"],
