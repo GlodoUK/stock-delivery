@@ -73,3 +73,22 @@ class TestMrp(CommonCommingleCase):
         picking_id.action_confirm()
         self.assertEqual(len(picking_id.move_lines), 1)
         self.assertEqual(picking_id.move_lines.product_id, self.product_bolta)
+
+        # XXX: Taken directly from sale_mrp/models/sale.py#L112-L115
+
+        filters = {
+            "incoming_moves": lambda m: m.location_dest_id.usage == "customer"
+            and (
+                not m.origin_returned_move_id
+                or (m.origin_returned_move_id and m.to_refund)
+            ),
+            "outgoing_moves": lambda m: m.location_dest_id.usage != "customer"
+            and m.to_refund,
+        }
+
+        self.assertEqual(
+            picking_id.move_lines._compute_kit_quantities(
+                self.product_bolt_kit, 1, self.bom_equiv_kit, filters
+            ),
+            1.0,
+        )

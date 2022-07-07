@@ -18,6 +18,16 @@ class TestStock(CommonCommingleCase):
         cls.stock_location = cls.env.ref("stock.stock_location_stock")
         cls.customer_location = cls.env.ref("stock.stock_location_customers")
 
+        cls.outbound_move_filters = {
+            "incoming_moves": lambda m: m.location_dest_id.usage == "customer"
+            and (
+                not m.origin_returned_move_id
+                or (m.origin_returned_move_id and m.to_refund)
+            ),
+            "outgoing_moves": lambda m: m.location_dest_id.usage != "customer"
+            and m.to_refund,
+        }
+
     def test_strict_default(self):
         picking_id = self.env["stock.picking"].create(
             {
@@ -47,6 +57,28 @@ class TestStock(CommonCommingleCase):
         picking_id.action_confirm()
         self.assertEqual(len(picking_id.move_lines), 1)
         self.assertEqual(picking_id.move_lines.product_id, self.product_bolta)
+        self.assertEqual(
+            picking_id.move_lines.product_commingled_id,
+            self.product_bolt_equiv.commingled_ids.filtered(
+                lambda c: c.product_id == self.product_bolta
+            ),
+        )
+        self.assertEqual(
+            picking_id.move_lines._compute_commingled_quantities(
+                self.product_bolt_equiv, self.outbound_move_filters
+            ),
+            1,
+        )
+
+        done_moves = picking_id.move_lines.filtered(lambda m: m.state == "done")
+
+        self.assertEqual(
+            done_moves._compute_commingled_quantities(
+                self.product_bolt_equiv,
+                self.outbound_move_filters,
+            ),
+            0,
+        )
 
     def test_strict_reordered(self):
         self.product_bolt_equiv.commingled_ids.filtered(
@@ -82,6 +114,27 @@ class TestStock(CommonCommingleCase):
         picking_id.action_confirm()
         self.assertEqual(len(picking_id.move_lines), 1)
         self.assertEqual(picking_id.move_lines.product_id, self.product_boltb)
+        self.assertEqual(
+            picking_id.move_lines.product_commingled_id,
+            self.product_bolt_equiv.commingled_ids.filtered(
+                lambda c: c.product_id == self.product_boltb
+            ),
+        )
+        self.assertEqual(
+            picking_id.move_lines._compute_commingled_quantities(
+                self.product_bolt_equiv, self.outbound_move_filters
+            ),
+            1,
+        )
+
+        self.assertEqual(
+            picking_id.move_lines.filtered(
+                lambda m: m.state == "done"
+            )._compute_commingled_quantities(
+                self.product_bolt_equiv, self.outbound_move_filters
+            ),
+            0,
+        )
 
     def test_deplete(self):
         self.product_bolt_equiv.write({"commingled_policy": "deplete"})
@@ -125,6 +178,28 @@ class TestStock(CommonCommingleCase):
         picking_id.action_confirm()
         self.assertEqual(len(picking_id.move_lines), 1)
         self.assertEqual(picking_id.move_lines.product_id, self.product_boltb)
+        self.assertEqual(
+            picking_id.move_lines.product_commingled_id,
+            self.product_bolt_equiv.commingled_ids.filtered(
+                lambda c: c.product_id == self.product_boltb
+            ),
+        )
+
+        self.assertEqual(
+            picking_id.move_lines._compute_commingled_quantities(
+                self.product_bolt_equiv, self.outbound_move_filters
+            ),
+            1,
+        )
+
+        self.assertEqual(
+            picking_id.move_lines.filtered(
+                lambda m: m.state == "done"
+            )._compute_commingled_quantities(
+                self.product_bolt_equiv, self.outbound_move_filters
+            ),
+            0,
+        )
 
     def test_deplete_prefer_homogenous(self):
         self.product_bolt_equiv.write(
@@ -173,6 +248,27 @@ class TestStock(CommonCommingleCase):
         picking_id.action_confirm()
         self.assertEqual(len(picking_id.move_lines), 1)
         self.assertEqual(picking_id.move_lines.product_id, self.product_bolta)
+        self.assertEqual(
+            picking_id.move_lines.product_commingled_id,
+            self.product_bolt_equiv.commingled_ids.filtered(
+                lambda c: c.product_id == self.product_bolta
+            ),
+        )
+        self.assertEqual(
+            picking_id.move_lines._compute_commingled_quantities(
+                self.product_bolt_equiv, self.outbound_move_filters
+            ),
+            102,
+        )
+
+        self.assertEqual(
+            picking_id.move_lines.filtered(
+                lambda m: m.state == "done"
+            )._compute_commingled_quantities(
+                self.product_bolt_equiv, self.outbound_move_filters
+            ),
+            0,
+        )
 
     def test_deplete_no_prefer_homogenous(self):
         self.product_bolt_equiv.write(
@@ -220,6 +316,21 @@ class TestStock(CommonCommingleCase):
 
         picking_id.action_confirm()
         self.assertEqual(len(picking_id.move_lines), 2)
+        self.assertEqual(
+            picking_id.move_lines._compute_commingled_quantities(
+                self.product_bolt_equiv, self.outbound_move_filters
+            ),
+            102,
+        )
+
+        self.assertEqual(
+            picking_id.move_lines.filtered(
+                lambda m: m.state == "done"
+            )._compute_commingled_quantities(
+                self.product_bolt_equiv, self.outbound_move_filters
+            ),
+            0,
+        )
 
     def test_deplete_split(self):
         self.product_bolt_equiv.write({"commingled_policy": "deplete"})
@@ -262,3 +373,19 @@ class TestStock(CommonCommingleCase):
 
         picking_id.action_confirm()
         self.assertEqual(len(picking_id.move_lines), 2)
+
+        self.assertEqual(
+            picking_id.move_lines._compute_commingled_quantities(
+                self.product_bolt_equiv, self.outbound_move_filters
+            ),
+            102,
+        )
+
+        self.assertEqual(
+            picking_id.move_lines.filtered(
+                lambda m: m.state == "done"
+            )._compute_commingled_quantities(
+                self.product_bolt_equiv, self.outbound_move_filters
+            ),
+            0,
+        )
