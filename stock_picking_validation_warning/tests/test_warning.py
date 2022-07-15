@@ -49,6 +49,7 @@ class TestWarning(TransactionCase):
                             "product_id": self.product.id,
                             "product_uom": self.product.uom_id.id,
                             "product_uom_qty": 1,
+                            "location_id": self.picking_type_out.default_location_src_id.id,
                         },
                     ),
                 ],
