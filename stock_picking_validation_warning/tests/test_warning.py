@@ -7,7 +7,6 @@ class TestWarning(TransactionCase):
 
         self.warehouse = self.env.ref("stock.warehouse0")
         self.picking_type_out = self.warehouse.out_type_id
-        self.customer_location = self.env.ref("stock.stock_location_customers")
         self.product = self.env["product.product"].create(
             {
                 "type": "product",
@@ -32,13 +31,27 @@ class TestWarning(TransactionCase):
                 "picking_warn_msg": "customer warning!",
             }
         )
+        self.location = self.env["stock.location"].create(
+            {
+                "name": "Test Location",
+                "usage": "internal",
+                "location_id": self.warehouse.view_location_id.id,
+            }
+        )
+        self.customer_location = self.env["stock.location"].create(
+            {
+                "name": "Customer Location",
+                "usage": "internal",
+                "location_id": self.warehouse.view_location_id.id,
+            }
+        )
 
     def test_compute_picking_warn_msg(self):
         picking = self.env["stock.picking"].create(
             {
                 "partner_id": self.partner.id,
                 "picking_type_id": self.picking_type_out.id,
-                "location_id": self.picking_type_out.default_location_src_id.id,
+                "location_id": self.location.id,
                 "location_dest_id": self.customer_location.id,
                 "move_lines": [
                     (
@@ -49,7 +62,8 @@ class TestWarning(TransactionCase):
                             "product_id": self.product.id,
                             "product_uom": self.product.uom_id.id,
                             "product_uom_qty": 1,
-                            "location_id": self.picking_type_out.default_location_src_id.id,
+                            "location_dest_id": self.customer_location.id,
+                            "location_id": self.location.id,
                         },
                     ),
                 ],
@@ -73,7 +87,7 @@ class TestWarning(TransactionCase):
             {
                 "partner_id": self.partner.id,
                 "picking_type_id": self.picking_type_out.id,
-                "location_id": self.picking_type_out.default_location_src_id.id,
+                "location_id": self.location.id,
                 "location_dest_id": self.customer_location.id,
                 "move_lines": [
                     (
@@ -84,6 +98,8 @@ class TestWarning(TransactionCase):
                             "product_id": self.product.id,
                             "product_uom": self.product.uom_id.id,
                             "product_uom_qty": 1,
+                            "location_id": self.location.id,
+                            "location_dest_id": self.customer_location.id,
                         },
                     ),
                 ],
