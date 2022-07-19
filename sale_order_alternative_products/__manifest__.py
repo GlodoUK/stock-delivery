@@ -11,7 +11,7 @@
     # odoo/addons/base/data/ir_module_category_data.xml
     # for the full list
     "category": "Base",
-    "version": "15.0.1.0.0",
+    "version": "15.0.2.0.0",
     # any module necessary for this one to work correctly
     "depends": [
         "sale",
@@ -22,6 +22,7 @@
         "views/sale_order.xml",
         "wizards/wizard_suggest_alternatives.xml",
         "views/product.xml",
+        "views/res_config.xml",
     ],
     "license": "AGPL-3",
 }
