@@ -9,7 +9,6 @@
         <field name="name">Spring</field>
         <field name="delivery_type">spring</field>
         <field name="product_id" ref="spring_product" />
-        <field name="default_product_weight">1.0</field>
         <field name="uom_id" ref="uom.product_uom_categ_unit" />
     </record>
 </odoo>
