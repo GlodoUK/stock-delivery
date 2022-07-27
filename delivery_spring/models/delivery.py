@@ -271,7 +271,6 @@ class DeliveryCarrier(models.Model):
                     "not in",
                     ["customer_delivered", "warehouse_delivered"],
                 ),
-                "|",
                 ("date_next_tracking_update", ">=", fields.datetime.now()),
             ]
         )
