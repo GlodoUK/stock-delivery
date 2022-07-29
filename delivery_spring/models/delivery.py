@@ -92,6 +92,10 @@ class DeliveryCarrier(models.Model):
                 "Command": "GetServices",
             },
         )
+
+        if not response or response.status_code != 200:
+            raise ValidationError(_("Unknown Spring API Error"))
+
         services = response.json().get("Services", {})
         service_list = services.get("List", {})
         allowed_services = services.get("AllowedServices", [])
@@ -118,13 +122,80 @@ class DeliveryCarrier(models.Model):
             )
 
     def spring_rate_shipment(self, order):
-        # TODO: Get Spring price from API
-        # Can't see the option in the API docs
+        product_list = []
+        product_weight = 0
+        for line in order.order_line:
+            if line.product_id.weight == 0.0:
+                line.product_id.weight = 0.1
+            product_list.append(
+                {
+                    "Description": line.name,
+                    "Sku": line.product_id.default_code,
+                    "OriginCountry": order.company_id.country_id.code,
+                    "Quantity": line.product_uom_qty,
+                    "Value": line.product_id.lst_price,
+                    "Weight": line.product_id.weight * line.product_uom_qty,
+                }
+            )
+            product_weight += line.product_id.weight * line.product_uom_qty
 
-        price = self.product_id.lst_price
+        order_value = 0.0
+        response = requests.post(
+            self.spring_url,
+            headers={
+                "Content-Type": "text/json",
+            },
+            json={
+                "Apikey": self.spring_api_key,
+                "Command": "OrderShipmentInfo",
+                "Shipment": {
+                    "LabelFormat": self.spring_label_format,
+                    "ShipperReference": order.name or "TBC",
+                    "Service": self.spring_service.ref,
+                    "Weight": product_weight,
+                    "WeightUnit": "kg",
+                    "Value": order_value,
+                    "Currency": order.company_id.currency_id.name,
+                    "ConsignorAddress": {
+                        "Name": order.company_id.name,
+                        "Company": order.company_id.name,
+                        "VAT": order.company_id.vat,
+                    },
+                    "ConsigneeAddress": {
+                        "Name": order.partner_id.name,
+                        "Company": order.partner_id.name,
+                        "AddressLine1": order.partner_id.street,
+                        "AddressLine2": order.partner_id.street2,
+                        "City": order.partner_id.city,
+                        "State": order.partner_id.state_id.name,
+                        "Zip": order.partner_id.zip,
+                        "Country": order.partner_id.country_id.code or "",
+                        "Phone": order.partner_id.phone,
+                        "Email": order.partner_id.email,
+                        "Vat": order.partner_id.vat,
+                    },
+                    "Products": product_list,
+                },
+            },
+        )
+
+        if not response or response.status_code != 200:
+            raise ValidationError(_("Unknown Spring API Error"))
+
+        json = response.json()
+
+        if json.get("ErrorLevel") != 0:
+            raise ValidationError(_("Spring API Error: %s") % json.get("Error"))
+
+        shipment = json.get("Shipment")
+        costs = shipment.get("DdpInfo", {}).get("landedCost", {})
+        shipping_value = costs.get("ShippingValue", 0.0)
+
+        if shipping_value == 0.0:
+            shipping_value = self.product_id.lst_price or 0.0
 
         return {
-            "price": price,
+            "price": shipping_value,
             "success": True,
         }
 
@@ -132,6 +203,8 @@ class DeliveryCarrier(models.Model):
         order = self.env["sale.order"].search([("name", "=", picking.origin)])
         product_list = []
         for line in picking.move_lines:
+            if line.product_id.product_weight == 0.0:
+                line.product_id.product_weight = 0.1
             product_list.append(
                 {
                     "Description": line.name,
@@ -188,7 +261,8 @@ class DeliveryCarrier(models.Model):
                 },
             },
         )
-        if not response:
+
+        if not response or response.status_code != 200:
             raise ValidationError(_("Unknown Spring API Error"))
 
         json = response.json()
@@ -252,7 +326,8 @@ class DeliveryCarrier(models.Model):
                     },
                 },
             )
-            if not response:
+
+            if not response or response.status_code != 200:
                 raise ValidationError(_("Unknown Spring API Error"))
 
             json = response.json()
@@ -293,7 +368,8 @@ class DeliveryCarrier(models.Model):
                 },
             },
         )
-        if not response:
+
+        if not response or response.status_code != 200:
             raise ValidationError(_("Unknown Spring API Error"))
 
         json = response.json()
