@@ -1,3 +1,5 @@
+import itertools
+
 from odoo import models
 
 
@@ -28,3 +30,35 @@ class StockMove(models.Model):
             # support commingled within phantom kits
             moves = moves._action_commingled()
         return moves
+
+    def _compute_commingled_quantities(self, product_id, qty, filters):
+        if not self.filtered(lambda m: m.bom_line_id):
+            return super()._compute_commingled_quantities(product_id, filters)
+
+        done = 0
+
+        moves = self.sorted(lambda m: (m.product_commingled_id, m.bom_line_id.bom_id))
+        for (commingled_id, bom_id), g in itertools.groupby(
+            moves, key=lambda m: (m.product_commingled_id, m.bom_line_id.bom_id)
+        ):
+            g = list(g)
+            todo = self.env["stock.move"]
+            for m in g:
+                todo |= m
+
+            if bom_id:
+                done += todo._compute_kit_quantities(
+                    bom_id,
+                    filters,
+                )
+                continue
+
+            if commingled_id:
+                done += todo._compute_commingled_quantities(
+                    commingled_id.parent_product_id, filters
+                )
+                continue
+
+            raise NotImplementedError()
+
+        return done

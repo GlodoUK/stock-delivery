@@ -19,13 +19,13 @@ class StockMove(models.Model):
     @api.model
     def _prepare_merge_moves_distinct_fields(self):
         distinct_fields = super()._prepare_merge_moves_distinct_fields()
-        distinct_fields.append("commingled_original_product_id")
+        distinct_fields.append("product_commingled_id")
         return distinct_fields
 
     @api.model
     def _prepare_merge_move_sort_method(self, move):
         keys_sorted = super()._prepare_merge_move_sort_method(move)
-        keys_sorted.append(move.commingled_original_product_id.id)
+        keys_sorted.append(move.product_commingled_id.id)
         return keys_sorted
 
     def _action_confirm(self, merge=True, merge_into=False):
@@ -89,7 +89,7 @@ class StockMove(models.Model):
             "quantity_done": quantity_done,
             "picking_type_id": self.picking_type_id.id,
             "commingled_original_product_id": (
-                self.commingled_original_product_id
+                self.commingled_original_product_id.id
                 if self.commingled_original_product_id.id
                 else self.product_id.id
             ),

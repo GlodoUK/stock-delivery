@@ -92,3 +92,44 @@ class TestMrp(CommonCommingleCase):
             ),
             1.0,
         )
+
+    def test_commingled_with_kit(self):
+        commingled_with_kit_inside = self.env["product.product"].create(
+            {
+                "name": "commingled_with_kit_inside",
+                "type": "product",
+                "commingled_ok": True,
+                "commingled_ids": [(0, 0, {"product_id": self.product_bolt_kit.id})],
+            }
+        )
+
+        picking_id = self.env["stock.picking"].create(
+            {
+                "location_id": self.stock_location.id,
+                "location_dest_id": self.customer_location.id,
+                "picking_type_id": self.env.ref("stock.picking_type_out").id,
+                "move_lines": [
+                    (
+                        0,
+                        0,
+                        {
+                            "product_id": commingled_with_kit_inside.id,
+                            "product_uom": commingled_with_kit_inside.uom_id.id,
+                            "product_uom_qty": 1.0,
+                            "name": "test_move_1",
+                            "location_id": self.stock_location.id,
+                            "location_dest_id": self.customer_location.id,
+                            "picking_type_id": self.env.ref(
+                                "stock.picking_type_out"
+                            ).id,
+                        },
+                    ),
+                ],
+            }
+        )
+
+        picking_id.action_confirm()
+        __import__("wdb").set_trace()
+
+        self.assertEqual(len(picking_id.move_lines), 1)
+        self.assertEqual(picking_id.move_lines.product_id, self.product_bolta)
