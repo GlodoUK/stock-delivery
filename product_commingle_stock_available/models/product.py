@@ -1,4 +1,4 @@
-from odoo import api, models
+from odoo import _, api, models
 
 
 class ProductProduct(models.Model):
@@ -11,7 +11,7 @@ class ProductProduct(models.Model):
     def _compute_available_quantities_dict(self):
         res, stock_dict = super()._compute_available_quantities_dict()
         icp = self.env["ir.config_parameter"]
-        based_on = icp.sudo().get_param("stock_available_mrp_based_on", "potential_qty")
+        based_on = icp.sudo().get_param("stock_available_mrp_based_on", "qty_available")
 
         todo = self.filtered(lambda p: p.commingled_ok)
 
@@ -37,15 +37,34 @@ class ProductProduct(models.Model):
             needs = product_id._explode_commingled_needs(1)
 
             potential = []
+            immediately = []
 
             for line, _need in needs:
-                fallback = stock_dict[line.product_id.id]["qty_available"]
-                potential.append(stock_dict[line.product_id.id].get(based_on, fallback))
+                available_qty = 0.0
+                immediately_usable_qty = res[line.product_id.id][
+                    "immediately_usable_qty"
+                ]
+
+                if based_on in res[line.product_id.id]:
+                    available_qty = res[line.product_id.id][based_on]
+                elif based_on in stock_dict[line.product_id.id]:
+                    available_qty = stock_dict[line.product_id.id][based_on]
+                else:
+                    raise NotImplementedError(
+                        _(
+                            "Field %s is not supported to calculate commingled quantities"
+                        )
+                        % (based_on)
+                    )
+
+                potential.append(available_qty)
+                immediately.append(immediately_usable_qty)
 
             potential = sum(potential)
+            immediately = sum(immediately)
 
             res[product_id.id]["qty_available"] = potential
             res[product_id.id]["potential_qty"] = potential
-            res[product_id.id]["immediately_usable_qty"] = potential
+            res[product_id.id]["immediately_usable_qty"] = immediately
 
         return res, stock_dict
