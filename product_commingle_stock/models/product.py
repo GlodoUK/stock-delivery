@@ -33,7 +33,7 @@ class ProductTemplate(models.Model):
     commingled_prefer_homogenous = fields.Boolean(
         default=True,
         compute="_compute_commingled_prefer_homogenous",
-        inverse="_inverse_commingled_prefer_homogenou",
+        inverse="_inverse_commingled_prefer_homogenous",
     )
 
     @api.depends("product_variant_ids.commingled_policy")
