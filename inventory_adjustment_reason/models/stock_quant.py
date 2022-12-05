@@ -1,10 +1,10 @@
-from odoo import fields, models
+from odoo import api, fields, models
 
 
 class StockQuant(models.Model):
     _inherit = "stock.quant"
     note = fields.Text(string="Inventory Adjustment Reason")
-    
+
     def _get_inventory_move_values(self, qty, location_id, location_dest_id, out=False):
         res = super()._get_inventory_move_values(
             qty, location_id, location_dest_id, out=out
