@@ -42,7 +42,7 @@ class SaleOrderLine(models.Model):
                 record.alternatives = [(6, 0, record.product_id.alternative_ids.ids)]
 
     def check_alternative_product_setting(self):
-        config = self.env["ir.config_parameter"].get_param(
+        config = self.env["ir.config_parameter"].sudo().get_param(
             "sale_order_alternative_products.alternative_product"
         )
 
