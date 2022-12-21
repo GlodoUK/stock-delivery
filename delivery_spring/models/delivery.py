@@ -140,6 +140,7 @@ class DeliveryCarrier(models.Model):
                     "Quantity": line.product_uom_qty,
                     "Value": line.product_id.lst_price,
                     "Weight": line.product_id.weight,
+                    "HsCode": line.product_id.hs_code or "",
                 }
             )
         order_value = 0.0
