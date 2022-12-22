@@ -143,19 +143,19 @@ class DeliveryCarrier(models.Model):
                 product_list.append(
                     {
                         "Description": line.name,
-                        "Sku": line.product_id.default_code,
+                        "Sku": line.product_id.default_code or line.product_id.name,
                         "OriginCountry": picking.location_id.company_id.country_id.code,
                         "Quantity": line.product_uom_qty,
-                        "Value": line.product_id.lst_price,
+                        "Value": line.product_id.lst_price,  # FIXME
                         "Weight": line.product_id.weight,
                         "HsCode": line.product_id.hs_code or "",
                     }
                 )
-            order_value = 0.0
+            order_value = 0.0  # FIX ME
             order_name = picking.name
             order_date = picking.create_date.strftime("%Y-%m-%d")
             if order:
-                order_value = order.amount_untaxed
+                order_value = order.amount_untaxed  # FIXME
                 order_name = order.client_order_ref or order.name
                 order_date = order.date_order.strftime("%Y-%m-%d")
             response = requests.post(
@@ -182,11 +182,11 @@ class DeliveryCarrier(models.Model):
                         },
                         "ConsigneeAddress": {
                             "Name": picking.partner_id.name,
-                            "Company": picking.partner_id.name,
-                            "AddressLine1": picking.partner_id.street,
-                            "AddressLine2": picking.partner_id.street2,
+                            "Company": picking.partner_id.commercial_partner_id.name,
+                            "AddressLine1": picking.partner_id.street or "",
+                            "AddressLine2": picking.partner_id.street2 or "",
                             "City": picking.partner_id.city,
-                            "State": picking.partner_id.state_id.name,
+                            "State": picking.partner_id.state_id.name or "",
                             "Zip": picking.partner_id.zip,
                             "Country": picking.partner_id.country_id.code or "",
                             "Phone": picking.partner_id.phone,
@@ -205,7 +205,7 @@ class DeliveryCarrier(models.Model):
             if json.get("ErrorLevel") != 0:
                 raise ValidationError(_("Spring API Error: %s") % json.get("Error"))
 
-            shipment = json.get("Shipment")
+            shipment = json.get("Shipment", {})
             tracking = shipment.get("TrackingNumber")
             tracking_url = shipment.get("CarrierTrackingUrl")
             attachments_list = None
@@ -216,7 +216,10 @@ class DeliveryCarrier(models.Model):
                         "Spring_%s.%s"
                         % (
                             str(tracking),
-                            self.spring_label_format.replace("2", ""),
+                            (
+                                shipment.get("LabelFormat")
+                                or self.spring_label_format.replace("2", "")
+                            ).lower(),
                         ),
                         binascii.a2b_base64(str(shipment.get("LabelImage"))),
                     )
