@@ -72,12 +72,7 @@ class DeliveryCarrier(models.Model):
             and self.spring_api_key
             and not self.spring_service
         ):
-            try:
-                self.action_spring_get_services()
-            except Exception as e:
-                raise ValidationError from e(
-                    _("Could not fetch Services from Spring API: %s") % e.args[0]
-                )
+            self.action_spring_get_services()
 
     def action_spring_get_services(self):
         service_model = self.env["delivery.spring.service"].sudo()
@@ -96,10 +91,7 @@ class DeliveryCarrier(models.Model):
         service_list = services.get("List", {})
         allowed_services = services.get("AllowedServices", [])
 
-        context = self.env.context.copy()
-        context["active_test"] = False
-
-        existing_services = service_model.with_context(**context).search([])
+        existing_services = service_model.with_context(active_test=False).search([])
 
         for existing_service in existing_services:
             if existing_service.ref not in allowed_services:
@@ -118,125 +110,148 @@ class DeliveryCarrier(models.Model):
             )
 
     def spring_rate_shipment(self, order):
-        # TODO: Get Spring price from API
-        # Can't see the option in the API docs
+        matches = self._match_address(order.partner_shipping_id)
+        if not matches:
+            return {
+                "success": False,
+                "price": 0.0,
+                "error_message": _(
+                    "Error: this delivery method is not available for this address."
+                ),
+                "warning_message": False,
+            }
 
-        price = self.product_id.lst_price
+        price = order.pricelist_id.get_product_price(
+            self.product_id, 1.0, order.partner_id
+        )
 
         return {
-            "price": price,
             "success": True,
+            "price": price,
+            "error_message": False,
+            "warning_message": _(
+                "Spring API does not support dynamic rating at this time"
+            ),
         }
 
-    def spring_send_shipping(self, picking):
-        order = self.env["sale.order"].search([("name", "=", picking.origin)])
-        product_list = []
-        for line in picking.move_lines:
-            product_list.append(
-                {
-                    "Description": line.name,
-                    "Sku": line.product_id.default_code,
-                    "OriginCountry": picking.location_id.company_id.country_id.code,
-                    "Quantity": line.product_uom_qty,
-                    "Value": line.product_id.lst_price,
-                    "Weight": line.product_id.weight,
-                    "HsCode": line.product_id.hs_code or "",
+    def spring_send_shipping(self, pickings):
+        res = []
+        for picking in pickings:
+            order = picking.sale_id
+            product_list = []
+            for line in picking.move_lines:
+                product_list.append(
+                    {
+                        "Description": line.name,
+                        "Sku": line.product_id.default_code,
+                        "OriginCountry": picking.location_id.company_id.country_id.code,
+                        "Quantity": line.product_uom_qty,
+                        "Value": line.product_id.lst_price,
+                        "Weight": line.product_id.weight,
+                        "HsCode": line.product_id.hs_code or "",
+                    }
+                )
+            order_value = 0.0
+            order_name = picking.name
+            order_date = picking.create_date.strftime("%Y-%m-%d")
+            if order:
+                order_value = order.amount_untaxed
+                order_name = order.client_order_ref or order.name
+                order_date = order.date_order.strftime("%Y-%m-%d")
+            response = requests.post(
+                self.spring_url,
+                headers={
+                    "Content-Type": "text/json",
+                },
+                json={
+                    "Apikey": self.spring_api_key,
+                    "Command": "OrderShipment",
+                    "Shipment": {
+                        "LabelFormat": self.spring_label_format,
+                        "ShipperReference": picking.name,
+                        "OrderReference": order_name,
+                        "OrderDate": order_date,
+                        "Service": self.spring_service.ref,
+                        "Weight": picking.shipping_weight,
+                        "WeightUnit": picking.weight_uom_name,
+                        "Value": order_value,
+                        "Currency": picking.company_id.currency_id.name,
+                        "ConsignorAddress": {
+                            "Name": picking.location_id.company_id.name,
+                            "Company": picking.location_id.company_id.name,
+                        },
+                        "ConsigneeAddress": {
+                            "Name": picking.partner_id.name,
+                            "Company": picking.partner_id.name,
+                            "AddressLine1": picking.partner_id.street,
+                            "AddressLine2": picking.partner_id.street2,
+                            "City": picking.partner_id.city,
+                            "State": picking.partner_id.state_id.name,
+                            "Zip": picking.partner_id.zip,
+                            "Country": picking.partner_id.country_id.code or "",
+                            "Phone": picking.partner_id.phone,
+                            "Email": picking.partner_id.email,
+                            "Vat": picking.partner_id.vat,
+                        },
+                        "Products": product_list,
+                    },
+                },
+            )
+            if not response:
+                raise ValidationError(_("Unknown Spring API Error"))
+
+            json = response.json()
+
+            if json.get("ErrorLevel") != 0:
+                raise ValidationError(_("Spring API Error: %s") % json.get("Error"))
+
+            shipment = json.get("Shipment")
+            tracking = shipment.get("TrackingNumber")
+            tracking_url = shipment.get("CarrierTrackingUrl")
+
+            picking.message_post(
+                body=_(
+                    "Shipment sent to Spring<br/>"
+                    "Carrier: %(carrier_name)s<br/>"
+                    "Tracking Number: %(tracking_ref)s<br/>"
+                    "Tracking URL: %(url)s"
+                )
+                % {
+                    "carrier_name": shipment.get("Carrier"),
+                    "tracking_ref": tracking,
+                    "url": tracking_url,
                 }
             )
-        order_value = 0.0
-        order_name = picking.name
-        order_date = picking.create_date.strftime("%Y-%m-%d")
-        if order:
-            order_value = order.amount_untaxed
-            order_name = order.client_order_ref or order.name
-            order_date = order.date_order.strftime("%Y-%m-%d")
-        response = requests.post(
-            self.spring_url,
-            headers={
-                "Content-Type": "text/json",
-            },
-            json={
-                "Apikey": self.spring_api_key,
-                "Command": "OrderShipment",
-                "Shipment": {
-                    "LabelFormat": self.spring_label_format,
-                    "ShipperReference": picking.name,
-                    "OrderReference": order_name,
-                    "OrderDate": order_date,
-                    "Service": self.spring_service.ref,
-                    "Weight": picking.shipping_weight,
-                    "WeightUnit": picking.weight_uom_name,
-                    "Value": order_value,
-                    "Currency": picking.company_id.currency_id.name,
-                    "ConsignorAddress": {
-                        "Name": picking.location_id.company_id.name,
-                        "Company": picking.location_id.company_id.name,
-                    },
-                    "ConsigneeAddress": {
-                        "Name": picking.partner_id.name,
-                        "Company": picking.partner_id.name,
-                        "AddressLine1": picking.partner_id.street,
-                        "AddressLine2": picking.partner_id.street2,
-                        "City": picking.partner_id.city,
-                        "State": picking.partner_id.state_id.name,
-                        "Zip": picking.partner_id.zip,
-                        "Country": picking.partner_id.country_id.code or "",
-                        "Phone": picking.partner_id.phone,
-                        "Email": picking.partner_id.email,
-                        "Vat": picking.partner_id.vat,
-                    },
-                    "Products": product_list,
-                },
-            },
-        )
-        if not response:
-            raise ValidationError(_("Unknown Spring API Error"))
 
-        json = response.json()
-
-        if json.get("ErrorLevel") != 0:
-            raise ValidationError(_("Spring API Error: %s") % json.get("Error"))
-
-        shipment = json.get("Shipment")
-        tracking = shipment.get("TrackingNumber")
-        tracking_url = shipment.get("CarrierTrackingUrl")
-
-        picking.message_post(
-            body=_(
-                "Shipment sent to Spring<br/>"
-                "Carrier: %(carrier_name)s<br/>"
-                "Tracking Number: %(tracking_ref)s<br/>"
-                "Tracking URL: %(url)s"
+            picking.write(
+                {
+                    "carrier_consignment_ref": picking.name,
+                    "spring_carrier": shipment.get("Carrier"),
+                    "spring_tracking_url": tracking_url,
+                }
             )
-            % {
-                "carrier_name": shipment.get("Carrier"),
-                "tracking_ref": tracking,
-                "url": tracking_url,
-            }
-        )
+            self.spring_tracking_state_update(picking)
 
-        picking.write(
-            {
-                "carrier_consignment_ref": picking.name,
-                "spring_carrier": shipment.get("Carrier"),
-                "spring_tracking_url": tracking_url,
-            }
-        )
-        self.spring_tracking_state_update(picking)
+            res.append(
+                {
+                    "exact_price": 0.0,
+                    "tracking_number": tracking,
+                    "date_delivery": fields.Date.today(),
+                    "weight": picking.shipping_weight,
+                    "attachments": [
+                        (
+                            "Spring_%s.%s"
+                            % (
+                                str(tracking),
+                                self.spring_label_format.replace("2", ""),
+                            ),
+                            binascii.a2b_base64(str(shipment.get("LabelImage"))),
+                        )
+                    ],
+                }
+            )
 
-        return {
-            "exact_price": 0.0,
-            "tracking_number": tracking,
-            "date_delivery": fields.Date.today(),
-            "weight": picking.shipping_weight,
-            "attachments": [
-                (
-                    "Spring_%s.%s"
-                    % (str(tracking), self.spring_label_format.replace("2", "")),
-                    binascii.a2b_base64(str(shipment.get("LabelImage"))),
-                )
-            ],
-        }
+        return res
 
     def spring_cancel_shipment(self, pickings):
         for picking in pickings:
