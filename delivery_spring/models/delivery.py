@@ -208,6 +208,19 @@ class DeliveryCarrier(models.Model):
             shipment = json.get("Shipment")
             tracking = shipment.get("TrackingNumber")
             tracking_url = shipment.get("CarrierTrackingUrl")
+            attachments_list = None
+
+            if shipment.get("LabelImage"):
+                attachments_list = [
+                    (
+                        "Spring_%s.%s"
+                        % (
+                            str(tracking),
+                            self.spring_label_format.replace("2", ""),
+                        ),
+                        binascii.a2b_base64(str(shipment.get("LabelImage"))),
+                    )
+                ]
 
             picking.message_post(
                 body=_(
@@ -220,7 +233,8 @@ class DeliveryCarrier(models.Model):
                     "carrier_name": shipment.get("Carrier"),
                     "tracking_ref": tracking,
                     "url": tracking_url,
-                }
+                },
+                attachments=attachments_list,
             )
 
             picking.write(
@@ -238,16 +252,6 @@ class DeliveryCarrier(models.Model):
                     "tracking_number": tracking,
                     "date_delivery": fields.Date.today(),
                     "weight": picking.shipping_weight,
-                    "attachments": [
-                        (
-                            "Spring_%s.%s"
-                            % (
-                                str(tracking),
-                                self.spring_label_format.replace("2", ""),
-                            ),
-                            binascii.a2b_base64(str(shipment.get("LabelImage"))),
-                        )
-                    ],
                 }
             )
 
