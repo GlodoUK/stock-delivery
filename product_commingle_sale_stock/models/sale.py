@@ -6,14 +6,27 @@ class SaleOrderLine(models.Model):
 
     def _compute_qty_delivered(self):
         res = super(SaleOrderLine, self)._compute_qty_delivered()
-        for order_line in self.filtered(lambda l: l.product_id.commingled_ok):
-            # TODO: we aren't supporting partial delivery of commingled products
-            # due to the complications of kits within commingled products, and
-            # how we go about dealing with those.
-            if all(m.state == "done" for m in order_line.move_ids):
-                order_line.qty_delivered = order_line.product_uom_qty
-            else:
-                order_line.qty_delivered = 0.0
+
+        filters = {
+            "incoming_moves": lambda m: m.location_dest_id.usage == "customer"
+            and (
+                not m.origin_returned_move_id
+                or (m.origin_returned_move_id and m.to_refund)
+            ),
+            "outgoing_moves": lambda m: m.location_dest_id.usage != "customer"
+            and m.to_refund,
+        }
+
+        for order_line in self.filtered(
+            lambda l: l.product_id.commingled_ok
+            and l.qty_delivered_method == "stock_move"
+        ):
+            done_moves = order_line.mapped("move_ids").filtered(
+                lambda m: m.state == "done"
+            )
+            order_line.qty_delivered = done_moves._compute_commingled_quantities(
+                order_line.product_id, filters
+            )
         return res
 
     @api.onchange(

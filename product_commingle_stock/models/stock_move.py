@@ -1,4 +1,5 @@
-from odoo import api, fields, models
+from odoo import _, api, fields, models
+from odoo.exceptions import UserError
 from odoo.tools import OrderedSet
 
 
@@ -10,16 +11,21 @@ class StockMove(models.Model):
         "Commingled Product",
     )
 
+    product_commingled_id = fields.Many2one(
+        "product.commingled",
+        "Commingled Product",
+    )
+
     @api.model
     def _prepare_merge_moves_distinct_fields(self):
         distinct_fields = super()._prepare_merge_moves_distinct_fields()
-        distinct_fields.append("commingled_original_product_id")
+        distinct_fields.append("product_commingled_id")
         return distinct_fields
 
     @api.model
     def _prepare_merge_move_sort_method(self, move):
         keys_sorted = super()._prepare_merge_move_sort_method(move)
-        keys_sorted.append(move.commingled_original_product_id.id)
+        keys_sorted.append(move.product_commingled_id.id)
         return keys_sorted
 
     def _action_confirm(self, merge=True, merge_into=False):
@@ -83,10 +89,11 @@ class StockMove(models.Model):
             "quantity_done": quantity_done,
             "picking_type_id": self.picking_type_id.id,
             "commingled_original_product_id": (
-                self.commingled_original_product_id
+                self.commingled_original_product_id.id
                 if self.commingled_original_product_id.id
                 else self.product_id.id
             ),
+            "product_commingled_id": bom_line.id,
         }
 
     def _generate_move_commingled(self, bom_line, line_data, quantity_done=None):
@@ -100,3 +107,42 @@ class StockMove(models.Model):
             if self.state == "assigned":
                 vals["state"] = "assigned"
         return vals
+
+    def _compute_commingled_quantities(self, product_id, filters):
+        """
+        Computes the quantity delivered or received when a commingled item is sold or purchased.
+        :return: The quantity delivered or received
+        """
+
+        if not product_id.commingled_ok:
+            raise UserError(
+                _("Product %(product_id)s is not commingled!")
+                % {"product_id": product_id}
+            )
+
+        to_find = self.env["product.commingled"]
+        todo = product_id.commingled_ids
+
+        # FIXME: This does not support differing UoM, this is technically
+        # not supported by product_commingle anyway, however, this I believe
+        # is the only section of code that would fail.
+
+        while todo:
+            to_find |= product_id.commingled_ids
+
+            todo = (
+                product_id.commingled_ids.mapped("product_id")
+                .filtered(lambda p: p.commingled_ok)
+                .mapped("commingled_ids")
+            )
+
+        candidates = self.filtered(lambda m: m.product_commingled_id in (to_find))
+
+        incoming_moves = candidates.filtered(filters["incoming_moves"])
+        outgoing_moves = candidates.filtered(filters["outgoing_moves"])
+
+        qty_processed = sum(incoming_moves.mapped("product_qty")) - sum(
+            outgoing_moves.mapped("product_qty")
+        )
+
+        return qty_processed

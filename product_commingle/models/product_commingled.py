@@ -19,20 +19,17 @@ class ProductCommingled(models.Model):
         ),
     ]
 
-    @api.constrains("product_id")
-    def _check_uom_category(self):
+    @api.constrains("product_id", "parent_product_id")
+    def _check_uom(self):
         for line in self:
             parent_product = line.parent_product_id
             lines = line
             while lines:
-                if (
-                    parent_product.uom_id.category_id
-                    != lines.product_id.uom_id.category_id
-                ):
+                if parent_product.uom_id != lines.product_id.uom_id:
                     raise ValidationError(
                         _(
                             "You cannot mix and match commingled products with"
-                            " different UoM categories!\nParent: %(parent)s,"
+                            " different UoMs!\nParent: %(parent)s,"
                             " Child: %(child)s"
                         )
                         % {"parent": parent_product, "child": lines.product_id}
