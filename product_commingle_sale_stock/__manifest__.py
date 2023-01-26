@@ -9,5 +9,5 @@
     "auto_install": True,
     "data": [],
     "demo": [],
-    "license": "LGPL-3",
+    "license": "AGPL-3",
 }

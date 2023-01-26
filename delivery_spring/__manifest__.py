@@ -4,8 +4,12 @@
     "author": "Glo Networks",
     "website": "https://github.com/GlodoUK/stock-delivery",
     "category": "Sales",
-    "version": "15.0.1.0.0",
-    "depends": ["delivery", "delivery_state_events"],
+    "version": "15.0.2.1.0",
+    "depends": [
+        "delivery",
+        "delivery_state_events",
+        "sale_stock",
+    ],
     "data": [
         "views/views.xml",
         "data/data.xml",

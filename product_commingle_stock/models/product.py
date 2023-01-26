@@ -1,4 +1,4 @@
-from odoo import _, fields, models
+from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 from odoo.tools import float_round
 
@@ -13,22 +13,69 @@ class ProductCommingled(models.Model):
     outgoing_qty = fields.Float(related="product_id.outgoing_qty")
 
 
+COMMINGLED_POLICY = [
+    ("deplete", "Prioritise Depleting Stock"),
+    ("strict", "Exact Sequence"),
+]
+COMMINGLED_DEFAULT = "deplete"
+
+
 class ProductTemplate(models.Model):
     _inherit = "product.template"
 
     commingled_policy = fields.Selection(
-        [
-            ("deplete", "Prioritise Depleting Stock"),
-            ("strict", "Exact Sequence"),
-        ],
-        default="deplete",
+        COMMINGLED_POLICY,
+        default=COMMINGLED_DEFAULT,
         required=True,
+        compute="_compute_commingled_policy",
+        inverse="_inverse_commingled_policy",
     )
-    commingled_prefer_homogenous = fields.Boolean(default=True)
+    commingled_prefer_homogenous = fields.Boolean(
+        default=True,
+        compute="_compute_commingled_prefer_homogenous",
+        inverse="_inverse_commingled_prefer_homogenous",
+    )
+
+    @api.depends("product_variant_ids.commingled_policy")
+    def _compute_commingled_policy(self):
+        for record in self:
+            if len(record.product_variant_ids) == 1:
+                record.commingled_policy = record.product_variant_ids.commingled_policy
+            else:
+                record.commingled_policy = COMMINGLED_DEFAULT
+
+    def _inverse_commingled_policy(self):
+        for p in self:
+            if len(p.product_variant_ids) == 1:
+                p.product_variant_ids.commingled_policy = p.commingled_policy
+
+    @api.depends("product_variant_ids.commingled_prefer_homogenous")
+    def _compute_commingled_prefer_homogenous(self):
+        for record in self:
+            if len(record.product_variant_ids) == 1:
+                record.commingled_prefer_homogenous = (
+                    record.product_variant_ids.commingled_prefer_homogenous
+                )
+            else:
+                record.commingled_prefer_homogenous = True
+
+    def _inverse_commingled_prefer_homogenous(self):
+        for p in self:
+            if len(p.product_variant_ids) == 1:
+                p.product_variant_ids.commingled_prefer_homogenous = (
+                    p.commingled_prefer_homogenous
+                )
 
 
 class ProductProduct(models.Model):
     _inherit = "product.product"
+
+    commingled_policy = fields.Selection(
+        COMMINGLED_POLICY,
+        default=COMMINGLED_DEFAULT,
+        required=True,
+    )
+    commingled_prefer_homogenous = fields.Boolean(default=True)
 
     def _explode_commingled_needs(self, qty, location_id=None):
         self.ensure_one()

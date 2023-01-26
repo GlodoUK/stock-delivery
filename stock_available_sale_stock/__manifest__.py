@@ -11,7 +11,7 @@
         "views/sale.xml",
     ],
     "demo": [],
-    "license": "LGPL-3",
+    "license": "AGPL-3",
     "assets": {
         "web.assets_backend": [
             "stock_available_sale_stock/static/src/js/**/*",
