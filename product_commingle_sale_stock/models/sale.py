@@ -6,7 +6,10 @@ class SaleOrderLine(models.Model):
 
     def _compute_qty_delivered(self):
         res = super(SaleOrderLine, self)._compute_qty_delivered()
-        for order_line in self.filtered(lambda l: l.product_id.commingled_ok):
+        for order_line in self.filtered(
+            lambda l: l.product_id.commingled_ok
+            and l.qty_delivered_method == "stock_move"
+        ):
             # TODO: we aren't supporting partial delivery of commingled products
             # due to the complications of kits within commingled products, and
             # how we go about dealing with those.
