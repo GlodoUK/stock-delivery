@@ -291,7 +291,7 @@ class DeliveryCarrier(models.Model):
                     "not in",
                     ["customer_delivered", "warehouse_delivered"],
                 ),
-                ("date_next_tracking_update", ">=", fields.datetime.now()),
+                ("date_next_tracking_update", "<=", fields.datetime.now()),
             ]
         )
         for picking in pickings:
@@ -352,9 +352,7 @@ class DeliveryCarrier(models.Model):
                     latest_event.get("CarrierDescription"),
                 )
             if current_state in ["customer_delivered", "warehouse_delivered"]:
-                picking.date_delivery = latest_event.get("DateTime")
-            if current_state == "shipping_recorded_in_carrier":
-                picking.date_shipped = latest_event.get("DateTime")
+                picking.date_delivered = latest_event.get("DateTime")
 
     def spring_tracking_state_calc_next_update(self, picking):
         if picking.delivery_state in ["customer_delivered", "warehouse_delivered"]:
