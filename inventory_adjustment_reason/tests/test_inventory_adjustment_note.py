@@ -23,7 +23,7 @@ class TestInventoryAdjustmentNote(TestCommon):
 
         stock_adjustment.action_apply_inventory()
 
-        move = self.model_stock_move.search(
+        move = self.model_stock_move_line.search(
             [
                 ("product_id", "=", self.product1.id),
                 ("note", "=", "This is a test note"),

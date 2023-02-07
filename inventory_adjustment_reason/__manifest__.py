@@ -8,9 +8,7 @@
     "category": "Sales",
     "version": "15.0.0.0.0",
     "depends": ["stock"],
-    "data": [
-        "views/stock_quant.xml",
-    ],
+    "data": ["views/stock_quant.xml", "views/stock_move.xml"],
     "demo": [],
     "license": "AGPL-3",
 }
