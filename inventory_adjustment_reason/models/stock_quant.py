@@ -36,3 +36,11 @@ class StockMove(models.Model):
     _inherit = "stock.move"
 
     note = fields.Text()
+
+
+class StockMoveLine(models.Model):
+    _inherit = "stock.move.line"
+
+    note = fields.Text(
+        related="move_id.note",
+    )
