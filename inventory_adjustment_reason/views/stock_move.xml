@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <odoo>
-    <data>
         <record id="stock_view_move_line_tree" model="ir.ui.view">
             <field name="name">stock.move.line.tree</field>
             <field name="model">stock.move.line</field>
@@ -11,7 +10,4 @@
                 </field>
             </field>
         </record>
-
-
-    </data>
 </odoo>
