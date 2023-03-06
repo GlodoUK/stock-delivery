@@ -292,6 +292,9 @@ class DeliveryCarrier(models.Model):
                     ["customer_delivered", "warehouse_delivered"],
                 ),
                 ("date_next_tracking_update", "<=", fields.datetime.now()),
+                "|",
+                ("carrier_consignment_ref", "!=", False),
+                ("carrier_tracking_ref", "!=", False),
             ]
         )
         for picking in pickings:
@@ -319,7 +322,7 @@ class DeliveryCarrier(models.Model):
         json = response.json()
 
         if json.get("ErrorLevel") != 0:
-            raise ValidationError(_("Spring API Error: %s") % json.get("Error"))
+            picking.message_post(body=_("Spring API Error: %s") % json.get("Error"))
 
         shipment = json.get("Shipment", {})
         events = sorted(shipment.get("Events", []), key=lambda e: e.get("DateTime"))
