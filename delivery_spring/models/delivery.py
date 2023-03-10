@@ -7,7 +7,7 @@ from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
 
 SPRING_DELIVERY_CODE_MAP = {
-    0: "shipping_recorded_in_carrier",
+    0: "in_transit",
     20: "in_transit",
     21: "in_transit",
     2101: "in_transit",
