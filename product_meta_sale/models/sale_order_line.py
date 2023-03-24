@@ -82,6 +82,17 @@ class SaleOrderLine(models.Model):
         if vals:
             seen |= self.create(vals)
 
+        name = self.get_sale_order_line_multiline_description_sale(self.product_id)
+        children = "\n".join(
+            seen.mapped(
+                lambda l: self.get_sale_order_line_multiline_description_sale(
+                    l.product_id
+                )
+            )
+        )
+
+        self.name = f"{name}\n{children}"
+
         return seen
 
     @api.model
