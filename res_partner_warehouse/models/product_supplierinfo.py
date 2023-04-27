@@ -18,7 +18,11 @@ class ProductSupplierInfo(models.Model):
 
     def _compute_res_partner_warehouse_quantity(self):
         for record in self:
-            if not record.res_partner_warehouse_id:
+            if (
+                not record.res_partner_warehouse_id
+                or not record.product_id
+                or not record.product_id.active
+            ):
                 record.res_partner_warehouse_quantity = False
                 continue
 
