@@ -66,6 +66,8 @@ class ResPartnerWarehouse(models.Model):
         return action
 
     def _get_available_quantity(self, product_id, uom_id=False):
+        if not product_id:
+            return 0
         self.ensure_one()
         product_id.ensure_one()
 
