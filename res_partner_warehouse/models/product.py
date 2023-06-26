@@ -1,4 +1,4 @@
-from odoo import fields, models
+from odoo import api, fields, models
 from odoo.tools import float_compare
 
 
@@ -34,6 +34,36 @@ class ProductProduct(models.Model):
         compute="_compute_res_partner_warehouse_qty",
         string="Partner Warehouse Quantity",
     )
+
+    virtual_available_inc_partner_warehouse = fields.Float(
+        compute="_compute_res_partner_warehouse_qtys",
+        string="Forecasted Quantity inc. Suppliers",
+    )
+
+    qty_available_inc_partner_warehouse = fields.Float(
+        compute="_compute_res_partner_warehouse_qtys",
+        string="Quantity On Hand inc. Suppliers",
+    )
+
+    free_qty_inc_partner_warehouse = fields.Float(
+        compute="_compute_res_partner_warehouse_qtys",
+        string="Free Quantity inc. Suppliers",
+    )
+
+    @api.depends(
+        "virtual_available", "qty_available", "free_qty", "res_partner_warehouse_qty"
+    )
+    def _compute_res_partner_warehouse_qtys(self):
+        for record in self:
+            record.virtual_available_inc_partner_warehouse = (
+                record.virtual_available + record.res_partner_warehouse_qty
+            )
+            record.qty_available_inc_partner_warehouse = (
+                record.qty_available + record.res_partner_warehouse_qty
+            )
+            record.free_qty_inc_partner_warehouse = (
+                record.free_qty + record.res_partner_warehouse_qty
+            )
 
     def _compute_res_partner_warehouse_qty(self):
         quants_dict = self.env["res.partner.warehouse.quant"]._get_available_quantities(
