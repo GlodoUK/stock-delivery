@@ -16,7 +16,7 @@ class DeliveryCarrier(models.Model):
     )
 
     whistl_api_key = fields.Char(string="Whistl/Parcelhub API Key")
-    whistl_base_url = fields.Char(compute="_compute_whistl_base_url")
+    whistl_base_url = fields.Char(compute="_compute_whistl_base_url", store=True)
     whistl_service = fields.Many2one("delivery.whistl.service")
     whistl_label_format = fields.Selection(
         [
