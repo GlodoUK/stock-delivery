@@ -16,7 +16,7 @@ class DeliveryCarrier(models.Model):
     )
 
     whistl_api_key = fields.Char(string="Whistl/Parcelhub API Key")
-    whistl_base_url = fields.Char(default="https://despatchuat.whistl.co.uk/")
+    whistl_base_url = fields.Char(compute="_compute_whistl_base_url")
     whistl_service = fields.Many2one("delivery.whistl.service")
     whistl_label_format = fields.Selection(
         [
@@ -29,6 +29,14 @@ class DeliveryCarrier(models.Model):
         required=True,
         default="pdf",
     )
+
+    @api.depends("prod_environment")
+    def _compute_whistl_base_url(self):
+        for carrier in self:
+            if carrier.prod_environment:
+                carrier.whistl_base_url = "https://despatch.whistl.co.uk/"
+            else:
+                carrier.whistl_base_url = "https://despatchuat.whistl.co.uk/"
 
     @api.onchange("delivery_type", "whistl_api_key")
     def onchange_delivery_type_whistl(self):
