@@ -1,12 +1,12 @@
 <?xml version='1.0' encoding='utf-8' ?>
 <odoo noupdate="1">
     <record id="whistl_product" model="product.product">
-        <field name="name">Whistl Shipping</field>
+        <field name="name">Whistl/Parcelhub Shipping</field>
         <field name="type">service</field>
         <field name="categ_id" ref="delivery.product_category_deliveries" />
     </record>
     <record id="whistl_carrier" model="delivery.carrier">
-        <field name="name">Whistl</field>
+        <field name="name">Whistl/Parcelhub</field>
         <field name="delivery_type">whistl</field>
         <field name="product_id" ref="whistl_product" />
     </record>
