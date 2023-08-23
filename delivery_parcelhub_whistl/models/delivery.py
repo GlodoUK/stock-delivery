@@ -1,6 +1,7 @@
 import binascii
 import datetime
 import urllib
+import xml.etree.ElementTree as ET
 
 import requests
 
@@ -15,9 +16,17 @@ class DeliveryCarrier(models.Model):
         selection_add=[("whistl", "Whistl/Parcelhub")], ondelete={"whistl": "cascade"}
     )
 
-    whistl_api_key = fields.Char(string="Whistl/Parcelhub API Key")
     whistl_base_url = fields.Char(compute="_compute_whistl_base_url", store=True)
-    whistl_service = fields.Many2one("delivery.whistl.service")
+    whistl_username = fields.Char(string="Whistl/Parcelhub Username")
+    whistl_password = fields.Char(string="Whistl/Parcelhub Password")
+    whistl_token = fields.Char(string="Whistl/Parcelhub Token")
+    whistl_refresh_token = fields.Char(string="Whistl/Parcelhub Refresh Token")
+    whistl_token_expiry = fields.Datetime(string="Whistl/Parcelhub Token Expiry")
+
+    whistl_default_service = fields.Many2one(
+        "delivery.whistl.service", string="Whistl/Parcelhub Default Service"
+    )
+
     whistl_label_format = fields.Selection(
         [
             ("pdf", "PDF"),
@@ -38,21 +47,63 @@ class DeliveryCarrier(models.Model):
             else:
                 carrier.whistl_base_url = "https://despatchuat.whistl.co.uk/"
 
-    @api.onchange("delivery_type", "whistl_api_key")
-    def onchange_delivery_type_whistl(self):
-        if (
-            self.delivery_type == "whistl"
-            and self.whistl_api_key
-            and not self.whistl_service
-        ):
-            self.action_whistl_get_services()
-
     def _get_whistl_url(self, endpoint, args):
         self.ensure_one()
         url = list(urllib.parse.urlparse(self.whistl_base_url))
         url[2] = endpoint
         url[4] = urllib.parse.urlencode(args)
         return urllib.parse.urlunparse(url)
+
+    def whistl_get_auth_token(self):
+        request_url = self._get_whistl_url("TokenV2")
+
+        now = fields.datetime.now()
+
+        if self.whistl_token and self.whistl_token_expiry < now + datetime.timedelta(
+            seconds=60
+        ):
+            # We already have a valid token
+            return self.whistl_token
+
+        headers = {
+            "Content-Type": "application/xml; charset=utf-8",
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate",
+        }
+
+        if (
+            self.whistl_refresh_token
+            and self.whistl_token_expiry < now + datetime.timedelta(seconds=1800)
+        ):
+            # Token expires in less than 30 minutes, refresh it
+            request = ET.Element("RefreshToken")
+            ET.SubElement(request, "grant_type").text = "refreshtoken"
+            ET.SubElement(request, "username").text = self.whistl_refresh_token
+            ET.SubElement(request, "password").text = ""
+        else:
+            # Get a new token
+            request = ET.Element("RequestToken")
+            ET.SubElement(request, "grant_type").text = "bearer"
+            ET.SubElement(request, "username").text = self.whistl_username
+            ET.SubElement(request, "password").text = self.whistl_password
+
+        response = requests.get(
+            request_url, headers=headers, data=ET.tostring(request), timeout=20
+        )
+        if not response:
+            raise ValidationError(_("Unknown Whistl API Error"))
+        if not response.status_code == 200:
+            raise ValidationError(_("Whistl API Error: %s") % response.status_code)
+
+        response_xml = ET.fromstring(response.content)
+
+        self.whistl_token = response_xml.find("access_token").text
+        self.whistl_refresh_token = response_xml.find("refreshToken").text
+        self.whistl_token_expiry = now + datetime.timedelta(
+            seconds=response_xml.find("expiresIn").text
+        )
+
+        return self.whistl_token
 
     def action_whistl_get_services(self):
         service_model = self.env["delivery.whistl.service"].sudo()

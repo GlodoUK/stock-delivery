@@ -12,11 +12,16 @@
                 >
                     <group>
                         <group>
+                            <field name="whistl_base_url" />
                             <field
-                                name="whistl_api_key"
+                                name="whistl_username"
                                 attrs="{'required': [('delivery_type', '=', 'whistl')]}"
                             />
-                            <field name="whistl_base_url" />
+                            <field
+                                name="whistl_password"
+                                attrs="{'required': [('delivery_type', '=', 'whistl')]}"
+                                password="True"
+                            />
                             <field name="whistl_service" />
                             <button
                                 name="action_whistl_get_services"
