@@ -7,7 +7,7 @@
         <field name="arch" type="xml">
             <xpath expr="//notebook" position="inside">
                 <page
-                    string="Whistl Credentials"
+                    string="Whistl"
                     attrs="{'invisible': [('delivery_type', '!=', 'whistl')]}"
                 >
                     <group>
@@ -22,14 +22,38 @@
                                 attrs="{'required': [('delivery_type', '=', 'whistl')]}"
                                 password="True"
                             />
-                            <field name="whistl_service" />
-                            <button
-                                name="action_whistl_get_services"
-                                type="object"
-                                string="Update Available Services"
+                            <field
+                                name="whistl_account"
+                                attrs="{'required': [('delivery_type', '=', 'whistl')]}"
                             />
-                            <field name="whistl_label_format" />
                         </group>
+                        <group string="Services">
+                            <p
+                            >Before Continuing, visit your Whistl/Parcelhub account to configure a service preference list:</p>
+                            <a
+                                href="https://despatch.whistl.co.uk/ServicePreferenceList"
+                                class="btn btn-primary"
+                                name="whistl_account"
+                                target="_blank"
+                            >View Whistl Account</a>
+                            <p
+                            >Then enter the ID of your chosen preference list below.</p>
+                            <field
+                                name="whistl_service_preference_list"
+                                options="{'format': 0}"
+                            />
+                        </group>
+                    </group>
+                </page>
+                <page
+                    string="Whistl Debug"
+                    groups="base.group_no_one"
+                    attrs="{'invisible': [('delivery_type', '!=', 'whistl')]}"
+                >
+                    <group>
+                        <field name="whistl_token" password="True" />
+                        <field name="whistl_refresh_token" password="True" />
+                        <field name="whistl_token_expiry" />
                     </group>
                 </page>
             </xpath>

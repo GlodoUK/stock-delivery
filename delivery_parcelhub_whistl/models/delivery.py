@@ -1,6 +1,6 @@
 import binascii
 import datetime
-import urllib
+import urllib.parse
 import xml.etree.ElementTree as ET
 
 import requests
@@ -19,20 +19,24 @@ class DeliveryCarrier(models.Model):
     whistl_base_url = fields.Char(compute="_compute_whistl_base_url", store=True)
     whistl_username = fields.Char(string="Whistl/Parcelhub Username")
     whistl_password = fields.Char(string="Whistl/Parcelhub Password")
-    whistl_token = fields.Char(string="Whistl/Parcelhub Token")
+    whistl_account = fields.Char(string="Whistl/Parcelhub Account Ref")
+    whistl_token = fields.Text(string="Whistl/Parcelhub Token")
     whistl_refresh_token = fields.Char(string="Whistl/Parcelhub Refresh Token")
     whistl_token_expiry = fields.Datetime(string="Whistl/Parcelhub Token Expiry")
 
-    whistl_default_service = fields.Many2one(
-        "delivery.whistl.service", string="Whistl/Parcelhub Default Service"
+    whistl_service_preference_list = fields.Integer(
+        string="Service Preference List ID",
+        help=(
+            "Configure your service preference list in your Whistl/Parcelhub"
+            " account and enter the ID here"
+        ),
     )
 
     whistl_label_format = fields.Selection(
         [
             ("pdf", "PDF"),
             ("png", "PNG"),
-            ("zpl", "ZPL300"),
-            ("zpl2", "ZPL200"),
+            ("zpl", "ZPL"),
             ("epl", "EPL"),
         ],
         required=True,
@@ -43,16 +47,30 @@ class DeliveryCarrier(models.Model):
     def _compute_whistl_base_url(self):
         for carrier in self:
             if carrier.prod_environment:
-                carrier.whistl_base_url = "https://despatch.whistl.co.uk/"
+                carrier.whistl_base_url = "https://api.parcelhub.net/1.0/"
             else:
-                carrier.whistl_base_url = "https://despatchuat.whistl.co.uk/"
+                carrier.whistl_base_url = "https://api.whistl.parcelhub.net/"
 
-    def _get_whistl_url(self, endpoint, args):
+    def _get_whistl_url(self, endpoint, args=False):
         self.ensure_one()
-        url = list(urllib.parse.urlparse(self.whistl_base_url))
-        url[2] = endpoint
-        url[4] = urllib.parse.urlencode(args)
-        return urllib.parse.urlunparse(url)
+        url = urllib.parse.urljoin(self.whistl_base_url, endpoint)
+        if self.whistl_account:
+            args = args or {}
+            args["account"] = self.whistl_account
+        if args:
+            url += "?" + urllib.parse.urlencode(args)
+        return url
+
+    def _get_whistl_headers(self, with_auth=True):
+        self.ensure_one()
+        headers = {
+            "Content-Type": "application/xml; charset=utf-8",
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate",
+        }
+        if with_auth:
+
+            headers["Authorization"] = "Bearer %s" % self.whistl_get_auth_token()
 
     def whistl_get_auth_token(self):
         request_url = self._get_whistl_url("TokenV2")
@@ -64,12 +82,6 @@ class DeliveryCarrier(models.Model):
         ):
             # We already have a valid token
             return self.whistl_token
-
-        headers = {
-            "Content-Type": "application/xml; charset=utf-8",
-            "Accept": "*/*",
-            "Accept-Encoding": "gzip, deflate",
-        }
 
         if (
             self.whistl_refresh_token
@@ -87,60 +99,26 @@ class DeliveryCarrier(models.Model):
             ET.SubElement(request, "username").text = self.whistl_username
             ET.SubElement(request, "password").text = self.whistl_password
 
-        response = requests.get(
-            request_url, headers=headers, data=ET.tostring(request), timeout=20
+        response = requests.post(
+            request_url,
+            headers=self._get_whistl_headers(False),
+            data=ET.tostring(request),
+            timeout=20,
         )
-        if not response:
-            raise ValidationError(_("Unknown Whistl API Error"))
         if not response.status_code == 200:
-            raise ValidationError(_("Whistl API Error: %s") % response.status_code)
+            raise ValidationError(
+                _("Whistl API Error Requesting Token: %s") % response.status_code
+            )
 
         response_xml = ET.fromstring(response.content)
 
         self.whistl_token = response_xml.find("access_token").text
         self.whistl_refresh_token = response_xml.find("refreshToken").text
         self.whistl_token_expiry = now + datetime.timedelta(
-            seconds=response_xml.find("expiresIn").text
+            seconds=int(response_xml.find("expiresIn").text)
         )
 
         return self.whistl_token
-
-    def action_whistl_get_services(self):
-        service_model = self.env["delivery.whistl.service"].sudo()
-
-        request_url = self._get_whistl_url("Service")
-
-        response = requests.post(
-            request_url,
-            headers={
-                "Content-Type": "text/json",
-            },
-            json={
-                "Apikey": self.whistl_api_key,
-                "Command": "GetServices",
-            },
-        )
-        services = response.json().get("Services", {})
-        service_list = services.get("List", {})
-        allowed_services = services.get("AllowedServices", [])
-
-        existing_services = service_model.with_context(active_test=False).search([])
-
-        for existing_service in existing_services:
-            if existing_service.ref not in allowed_services:
-                existing_service.active = False
-
-        for service in allowed_services:
-            existing = existing_services.filtered(lambda s: s.ref == service)
-            if existing:
-                existing.active = True
-                continue
-            service_model.create(
-                {
-                    "ref": service,
-                    "name": service_list.get(service),
-                }
-            )
 
     def whistl_rate_shipment(self, order):
         matches = self._match_address(order.partner_shipping_id)
@@ -184,93 +162,124 @@ class DeliveryCarrier(models.Model):
                         "HsCode": line.product_id.hs_code or "",
                     }
                 )
-            order_value = 0.0
-            order_name = picking.name
-            order_date = picking.create_date.strftime("%Y-%m-%d")
-            if order:
-                order_value = order.amount_untaxed
-                order_name = order.client_order_ref or order.name
-                order_date = order.date_order.strftime("%Y-%m-%d")
 
+            # Build Shipment
+            shipment = ET.Element("Shipment")
+            ET.SubElement(shipment, "Account").text = self.whistl_account
+
+            delivery_address = ET.SubElement(shipment, "DeliveryAddress")
+            ET.SubElement(
+                delivery_address, "ContactName"
+            ).text = picking.partner_id.name
+            if picking.partner_id.parent_id:
+                ET.SubElement(
+                    delivery_address, "CompanyName"
+                ).text = picking.partner_id.parent_id.name
+            ET.SubElement(delivery_address, "Email").text = picking.partner_id.email
+            ET.SubElement(delivery_address, "Phone").text = picking.partner_id.phone
+            ET.SubElement(delivery_address, "Address1").text = picking.partner_id.street
+            if picking.partner_id.street2:
+                ET.SubElement(
+                    delivery_address, "Address2"
+                ).text = picking.partner_id.street2
+            ET.SubElement(delivery_address, "City").text = picking.partner_id.city
+            ET.SubElement(
+                delivery_address, "Area"
+            ).text = picking.partner_id.state_id.name
+            ET.SubElement(delivery_address, "Postcode").text = picking.partner_id.zip
+            ET.SubElement(
+                delivery_address, "Country"
+            ).text = picking.partner_id.country_id.code
+
+            ET.SubElement(shipment, "Reference1").text = picking.name
+            ET.SubElement(shipment, "Reference2").text = order.name
+            ET.SubElement(
+                shipment, "ContentsDescription"
+            ).text = "Clothing/Protective Clothing"
+
+            packages = ET.SubElement(shipment, "Packages")
+            for package in picking.package_ids:
+                package_element = ET.SubElement(packages, "Package")
+                package_dimensions = ET.SubElement(package_element, "Dimensions")
+                ET.SubElement(package_dimensions, "Length").text = str(package.length)
+                ET.SubElement(package_dimensions, "Width").text = str(package.width)
+                ET.SubElement(package_dimensions, "Height").text = str(package.height)
+                ET.SubElement(package_element, "Weight").text = str(
+                    package.shipping_weight
+                )
+                value = ET.SubElement(package_element, "Value").text = str(
+                    package.value
+                )
+                value.attrib["Currency"] = picking.company_id.currency_id.name
+                ET.SubElement(
+                    package_element, "Contents"
+                ).text = "Clothing/Protective Clothing"
+
+            # Get Preferred Service
+            preference_list_id = self.whistl_service_preference_list
+            if not preference_list_id:
+                raise ValidationError(
+                    _("No Whistl Service Preference List ID has been configured")
+                )
             request_url = self._get_whistl_url(
-                "Shipment"
-            )  # TODO: Check this is correct
-
+                "Service/ServiceUsingServicePreference",
+                {"ServicePreferenceListId": self.whistl_service_preference_list},
+            )
             response = requests.post(
                 request_url,
-                headers={
-                    "Content-Type": "text/json",
-                },
-                json={
-                    "Apikey": self.whistl_api_key,
-                    "Command": "OrderShipment",
-                    "Shipment": {
-                        "LabelFormat": self.whistl_label_format,
-                        "ShipperReference": picking.name,
-                        "OrderReference": order_name,
-                        "OrderDate": order_date,
-                        "Service": self.whistl_service.ref,
-                        "Weight": picking.shipping_weight,
-                        "WeightUnit": picking.weight_uom_name,
-                        "Value": order_value,
-                        "Currency": picking.company_id.currency_id.name,
-                        "ConsignorAddress": {
-                            "Name": picking.location_id.company_id.name,
-                            "Company": picking.location_id.company_id.name,
-                        },
-                        "ConsigneeAddress": {
-                            "Name": picking.partner_id.name,
-                            "Company": picking.partner_id.name,
-                            "AddressLine1": picking.partner_id.street,
-                            "AddressLine2": picking.partner_id.street2,
-                            "City": picking.partner_id.city,
-                            "State": picking.partner_id.state_id.name,
-                            "Zip": picking.partner_id.zip,
-                            "Country": picking.partner_id.country_id.code or "",
-                            "Phone": picking.partner_id.phone,
-                            "Email": picking.partner_id.email,
-                            "Vat": picking.partner_id.vat,
-                        },
-                        "Products": product_list,
-                    },
-                },
+                headers=self._get_whistl_headers(),
+                data=shipment.tostring(),
             )
-            if not response:
-                raise ValidationError(_("Unknown Whistl API Error"))
 
-            json = response.json()
+            if not response.status_code == 200:
+                raise ValidationError(
+                    _("Whistl API Error Requesting Service: %s") % response.status_code
+                )
 
-            if json.get("ErrorLevel") != 0:
-                raise ValidationError(_("Whistl API Error: %s") % json.get("Error"))
+            service_xml = ET.fromstring(response.content)
 
-            shipment = json.get("Shipment")
-            tracking = shipment.get("TrackingNumber")
-            tracking_url = shipment.get("CarrierTrackingUrl")
-            attachments_list = None
+            service_info = service_xml.find("ServiceIds")
+            ET.SubElement(shipment, "ServiceInfo").text = service_info.text
 
-            if shipment.get("LabelImage"):
-                attachments_list = [
-                    (
-                        "Whistl_%s.%s"
-                        % (
-                            str(tracking),
-                            self.whistl_label_format.replace("2", ""),
-                        ),
-                        binascii.a2b_base64(str(shipment.get("LabelImage"))),
+            # Send to Whistl
+            request_url = self._get_whistl_url("Shipment")
+            response = requests.post(
+                request_url,
+                headers=self._get_whistl_headers(),
+                data=shipment.tostring(),
+            )
+            if not response.status_code == 200:
+                raise ValidationError(
+                    _("Whistl API Error Sending Shipment: %s") % response.status_code
+                )
+
+            shipment_xml = ET.fromstring(response.content)
+
+            tracking = shipment_xml.find("CourierTrackingNumber").text
+
+            attachments_list = []
+            if shipment_xml.find("LabelData"):
+                for label in shipment_xml.find("LabelData"):
+                    attachments_list.append(
+                        (
+                            "Whistl_%s.%s"
+                            % (
+                                str(tracking),
+                                self.whistl_label_format.replace("2", ""),
+                            ),
+                            binascii.a2b_base64(str(label.text)),
+                        )
                     )
-                ]
 
             picking.message_post(
                 body=_(
                     "Shipment sent to Whistl<br/>"
                     "Carrier: %(carrier_name)s<br/>"
                     "Tracking Number: %(tracking_ref)s<br/>"
-                    "Tracking URL: %(url)s"
                 )
                 % {
                     "carrier_name": shipment.get("Carrier"),
                     "tracking_ref": tracking,
-                    "url": tracking_url,
                 },
                 attachments=attachments_list,
             )
@@ -278,8 +287,7 @@ class DeliveryCarrier(models.Model):
             picking.write(
                 {
                     "carrier_consignment_ref": picking.name,
-                    "whistl_carrier": shipment.get("Carrier"),
-                    "whistl_tracking_url": tracking_url,
+                    "whistl_carrier": shipment_xml.get("ServiceProviderName"),
                 }
             )
             self.whistl_tracking_state_update(picking)
@@ -296,6 +304,7 @@ class DeliveryCarrier(models.Model):
         return res
 
     def whistl_cancel_shipment(self, pickings):
+        raise NotImplementedError("We didn't get to this bit yet")
         for picking in pickings:
             request_url = self._get_whistl_url(
                 "Shipment"
@@ -323,6 +332,7 @@ class DeliveryCarrier(models.Model):
             picking.carrier_tracking_url = False
 
     def whistl_tracking_state_update_scheduled(self):
+        raise NotImplementedError("We didn't get to this bit yet")
         pickings = self.env["stock.picking"].search(
             [
                 ("carrier_id", "=", self.id),
@@ -344,6 +354,7 @@ class DeliveryCarrier(models.Model):
             self.whistl_tracking_state_update(picking)
 
     def whistl_tracking_state_update(self, picking):
+        raise NotImplementedError("We didn't get to this bit yet")
         request_url = self._get_whistl_url("Shipment")  # TODO: Check this is correct
         response = requests.post(
             request_url,
@@ -400,18 +411,11 @@ class DeliveryCarrier(models.Model):
             #     picking.date_delivered = latest_event.get("DateTime")
 
     def whistl_tracking_state_calc_next_update(self, picking):
+        raise NotImplementedError("We didn't get to this bit yet")
         if picking.delivery_state in ["customer_delivered", "warehouse_delivered"]:
             return False
         return fields.datetime.now() + datetime.timedelta(hours=4)
 
     def whistl_get_tracking_link(self, picking):
+        raise NotImplementedError("We didn't get to this bit yet")
         return picking.whistl_tracking_url
-
-
-class WhistlService(models.Model):
-    _name = "delivery.whistl.service"
-    _description = "Whistl Service"
-
-    active = fields.Boolean(default=True)
-    name = fields.Char()
-    ref = fields.Char()
