@@ -13,7 +13,7 @@
     "data": [
         "views/views.xml",
         "data/data.xml",
-        "security/ir.model.access.csv",
+        # "security/ir.model.access.csv",
     ],
     "demo": [],
     "license": "AGPL-3",

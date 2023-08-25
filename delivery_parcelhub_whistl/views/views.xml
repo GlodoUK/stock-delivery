@@ -26,12 +26,17 @@
                                 name="whistl_account"
                                 attrs="{'required': [('delivery_type', '=', 'whistl')]}"
                             />
+                            <field
+                                name="whistl_tracking_api_key"
+                                attrs="{'required': [('delivery_type', '=', 'whistl')]}"
+                            />
                         </group>
                         <group string="Services">
                             <p
                             >Before Continuing, visit your Whistl/Parcelhub account to configure a service preference list:</p>
                             <a
                                 href="https://despatch.whistl.co.uk/ServicePreferenceList"
+                                role="button"
                                 class="btn btn-primary"
                                 name="whistl_account"
                                 target="_blank"
@@ -42,6 +47,8 @@
                                 name="whistl_service_preference_list"
                                 options="{'format': 0}"
                             />
+                            <field name="whistl_label_format" />
+                            <field name="whistl_label_size" />
                         </group>
                     </group>
                 </page>
