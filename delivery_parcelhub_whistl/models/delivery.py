@@ -3,12 +3,22 @@ import datetime
 import urllib.parse
 import xml.etree.ElementTree as ET
 
+import lxml.objectify as objectify
 import requests
 
 from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
 
 WHISLT_XMLNS = "http://api.parcelhub.net/schemas/api/parcelhub-api-v0.4.xsd"
+WHISTL_DELIVERY_CODE_MAP = {
+    "1": "customer_delivered",
+    "2": "in_transit",
+    "3": "in_transit",
+    "4": "incident",
+    "5": "held",
+    "7": "unknown",
+    "8": "held",
+}
 
 
 class DeliveryCarrier(models.Model):
@@ -41,24 +51,24 @@ class DeliveryCarrier(models.Model):
 
     whistl_label_format = fields.Selection(
         [
-            ("ZML", "ZPL"),
+            ("ZPL", "ZPL"),
             ("PDF", "PDF"),
             ("PNG", "PNG"),
             ("EPL", "EPL"),
         ],
         required=True,
-        default="PDF",
+        default="ZPL",
     )
 
     whistl_label_size = fields.Selection(
         [
-            ("8", "Size 8"),
-            ("6", "Size 6"),
-            ("4", "Size 4"),
-            ("2", "Size 2"),
+            ("8", '8"'),
+            ("6", '6"'),
+            ("4", '4"'),
+            ("2", '2"'),
         ],
         required=True,
-        default="8",
+        default="6",
     )  # TODO: Flesh this out, or pull from API
 
     @api.depends("prod_environment")
@@ -72,9 +82,17 @@ class DeliveryCarrier(models.Model):
     def _get_whistl_url(self, endpoint, args=False):
         self.ensure_one()
         url = urllib.parse.urljoin(self.whistl_base_url, endpoint)
-        if self.whistl_account:
+        if self.whistl_account and not self.env.context.get("whistl_skip_account"):
             args = args or {}
             args["account"] = self.whistl_account
+        if args:
+            url += "?" + urllib.parse.urlencode(args)
+        return url
+
+    def _get_whistl_tracking_url(self, endpoint, args=False):
+        self.ensure_one()
+        base_url = "https://trackapi.parcelhub.net/v1/"
+        url = urllib.parse.urljoin(base_url, endpoint)
         if args:
             url += "?" + urllib.parse.urlencode(args)
         return url
@@ -95,7 +113,7 @@ class DeliveryCarrier(models.Model):
 
         now = fields.datetime.now()
 
-        if self.whistl_token and self.whistl_token_expiry < now + datetime.timedelta(
+        if self.whistl_token and self.whistl_token_expiry > now + datetime.timedelta(
             seconds=60
         ):
             # We already have a valid token
@@ -103,10 +121,10 @@ class DeliveryCarrier(models.Model):
 
         if (
             self.whistl_refresh_token
-            and self.whistl_token_expiry < now + datetime.timedelta(seconds=1800)
+            and self.whistl_token_expiry < now + datetime.timedelta(seconds=600)
         ):
             # Token expires in less than 30 minutes, refresh it
-            request = ET.Element("RefreshToken")
+            request = ET.Element("RequestToken")
             ET.SubElement(request, "grant_type").text = "refreshtoken"
             ET.SubElement(request, "username").text = self.whistl_refresh_token
             ET.SubElement(request, "password").text = ""
@@ -124,8 +142,15 @@ class DeliveryCarrier(models.Model):
             timeout=20,
         )
         if not response.status_code == 200:
+            message = ET.fromstring(response.content).find("Message").text
+            self.whistle_token = False
+            self.whistl_refresh_token = False
+            self.whistl_token_expiry = False
             raise ValidationError(
-                _("Whistl API Error Requesting Token: %s") % response.status_code
+                _(
+                    "Whistl API Error Requesting Token. Please try again:"
+                    " {status_code}\n{message}"
+                ).format(status_code=response.status_code, message=message)
             )
 
         response_xml = ET.fromstring(response.content)
@@ -344,36 +369,44 @@ class DeliveryCarrier(models.Model):
                 message = ET.fromstring(response.content).find("Message").text
                 raise ValidationError(
                     _(
-                        "Whistl API Error Sending Shipment: {status_code}}\n{message}"
+                        "Whistl API Error Sending Shipment: {status_code}\n{message}"
                     ).format(status_code=response.status_code, message=message)
                 )
 
-            shipment_xml = ET.fromstring(response.content)
-
-            tracking = shipment_xml.find("CourierTrackingNumber").text
+            shipment_xml = objectify.fromstring(response.content)
+            tracking = shipment_xml.ShippingInfo.CourierTrackingNumber.text
 
             attachments_list = []
-            if shipment_xml.find("LabelData"):
-                for label in shipment_xml.find("LabelData"):
-                    attachments_list.append(
-                        (
-                            "Whistl_%s.%s"
-                            % (
-                                str(tracking),
-                                self.whistl_label_format.replace("2", ""),
-                            ),
-                            binascii.a2b_base64(str(label.text)),
-                        )
-                    )
+            packages = shipment_xml.Packages
+            if packages:
+                for package in packages.Package:
+                    for label in package.PackageShippingInfo.Labels.Label:
+                        label_data = label.LabelData
+                        if label_data:
+                            attachments_list.append(
+                                (
+                                    "Whistl_%s.%s"
+                                    % (
+                                        str(tracking),
+                                        self.whistl_label_format,
+                                    ),
+                                    binascii.a2b_base64(label_data.text),
+                                )
+                            )
+
+            carrier_name = shipment_xml.ShippingInfo.ServiceProviderName.text
+            service_name = shipment_xml.ShippingInfo.ServiceName.text
 
             picking.message_post(
                 body=_(
                     "Shipment sent to Whistl<br/>"
                     "Carrier: %(carrier_name)s<br/>"
+                    "Service Name: %(service_name)s<br/>"
                     "Tracking Number: %(tracking_ref)s<br/>"
                 )
                 % {
-                    "carrier_name": shipment.get("Carrier"),
+                    "carrier_name": carrier_name,
+                    "service_name": service_name,
                     "tracking_ref": tracking,
                 },
                 attachments=attachments_list,
@@ -382,7 +415,7 @@ class DeliveryCarrier(models.Model):
             picking.write(
                 {
                     "carrier_consignment_ref": picking.name,
-                    "whistl_carrier": shipment_xml.get("ServiceProviderName"),
+                    "whistl_carrier": "%s: %s" % (carrier_name, service_name),
                 }
             )
             self.whistl_tracking_state_update(picking)
@@ -399,35 +432,26 @@ class DeliveryCarrier(models.Model):
         return res
 
     def whistl_cancel_shipment(self, pickings):
-        raise NotImplementedError("We didn't get to this bit yet")
         for picking in pickings:
             request_url = self._get_whistl_url(
-                "Shipment"
-            )  # TODO: Check this is correct
-            response = requests.post(
-                request_url,
-                headers={
-                    "Content-Type": "text/json",
-                },
-                json={
-                    "Apikey": self.whistl_api_key,
-                    "Command": "VoidShipment",
-                    "Shipment": {
-                        "ShipperReference": picking.name,
-                    },
-                },
+                "Shipment/%s" % picking.carrier_consignment_ref,
             )
-            if not response:
-                raise ValidationError(_("Unknown Whistl API Error"))
+            response = requests.delete(
+                request_url,
+                headers=self._get_whistl_headers(),
+                timeout=20,
+            )
+            if not response.status_code == 200:
+                message = ET.fromstring(response.content).find("Message").text
+                raise ValidationError(
+                    _(
+                        "Whistl API Error Cancelling Shipment: {status_code}\n{message}"
+                    ).format(status_code=response.status_code, message=message)
+                )
 
-            json = response.json()
-
-            if json.get("ErrorLevel") != 0:
-                raise ValidationError(_("Whistl API Error: %s") % json.get("Error"))
             picking.carrier_tracking_url = False
 
     def whistl_tracking_state_update_scheduled(self):
-        raise NotImplementedError("We didn't get to this bit yet")
         pickings = self.env["stock.picking"].search(
             [
                 ("carrier_id", "=", self.id),
@@ -449,68 +473,85 @@ class DeliveryCarrier(models.Model):
             self.whistl_tracking_state_update(picking)
 
     def whistl_tracking_state_update(self, picking):
-        raise NotImplementedError("We didn't get to this bit yet")
-        request_url = self._get_whistl_url("Shipment")  # TODO: Check this is correct
+        request_url = self._get_whistl_tracking_url(
+            "trackingservice/gettrackinghistory"
+        )
+        request = ET.Element("GetTrackingHistoryRequest")
+        auth = ET.SubElement(request, "Authentication")
+        ET.SubElement(auth, "AccountId").text = self.whistl_account
+        ET.SubElement(auth, "AccessCode").text = self.whistl_tracking_api_key
+        ET.SubElement(request, "SearchType").text = "ByTrackingNumber"
+        ET.SubElement(request, "SearchTerm").text = picking.carrier_tracking_ref
+
         response = requests.post(
             request_url,
             headers={
-                "Content-Type": "text/json",
+                "Content-Type": "application/xml",
             },
-            json={
-                "Apikey": self.whistl_api_key,
-                "Command": "TrackShipment",
-                "Shipment": {
-                    "ShipperReference": picking.name,
-                },
-            },
+            data=ET.tostring(request, xml_declaration=True, encoding="utf-8"),
         )
-        if not response:
-            raise ValidationError(_("Unknown Whistl API Error"))
+        if not response.status_code == 200:
+            message = ET.fromstring(response.content).find("Message").text
+            raise ValidationError(
+                _(
+                    "Failed to get tracking information: {status_code}\n{message}"
+                ).format(status_code=response.status_code, message=message)
+            )
 
-        json = response.json()
+        tracking_response = ET.fromstring(response.content)
+        events = tracking_response.findall("TrackingEvent")
 
-        if json.get("ErrorLevel") != 0:
-            picking.message_post(body=_("Whistl API Error: %s") % json.get("Error"))
+        sorted_events = []
+        for event in events:
+            sorted_events.append(
+                {
+                    "EventTimestamp": event.find("EventTimestamp").text,
+                    "EventCategoryID": event.find("EventCategoryID").text,
+                    "EventDescription": event.find("EventDescription").text,
+                    "EventSubCategoryID": event.find("EventSubCategoryID").text,
+                    "EventSubCategoryDescription": event.find(
+                        "EventSubCategoryDescription"
+                    ).text,
+                }
+            )
+        sorted_events = sorted(sorted_events, key=lambda k: k["EventTimestamp"])
 
-        shipment = json.get("Shipment", {})
-        events = sorted(shipment.get("Events", []), key=lambda e: e.get("DateTime"))
-        if len(events) > picking.tracking_history_count:
-            for index, event in enumerate(events):
+        if len(sorted_events) > picking.tracking_history_count:
+            for index, event in enumerate(sorted_events):
                 if index > picking.tracking_history_count - 1:
                     self.env["stock.picking.tracking.history"].create(
                         {
                             "picking_id": picking.id,
-                            "date_event": event.get("DateTime"),
-                            "description": "%s: %s (%s, %s)"
+                            "date_event": event.get("EventTimestamp"),
+                            "description": "%s>%s: (%s>%s) %s"
                             % (
-                                event.get("Code"),
-                                event.get("Description"),
-                                event.get("CarrierCode"),
-                                event.get("CarrierDescription"),
+                                event.get("EventCategoryID"),
+                                event.get("EventSubCategoryID"),
+                                event.get("EventCategoryDescription"),
+                                event.get("EventSubCategoryDescription"),
+                                event.get("EventDescription"),
                             ),
                         }
                     )
-            # latest_event = events[-1]
-            # TODO: current_state = WHISTL_DELIVERY_CODE_MAP.get(latest_event.get("Code"))
-            # if not current_state:
-            #     picking.delivery_state = "unknown"
-            # else:
-            #     picking.delivery_state = current_state
-            #     picking.tracking_state = "%s: %s (%s, %s)" % (
-            #         latest_event.get("Code"),
-            #         latest_event.get("Description"),
-            #         latest_event.get("CarrierCode"),
-            #         latest_event.get("CarrierDescription"),
-            #     )
-            # if current_state in ["customer_delivered", "warehouse_delivered"]:
-            #     picking.date_delivered = latest_event.get("DateTime")
+        latest_event = sorted_events[-1]
+        current_state = WHISTL_DELIVERY_CODE_MAP.get(
+            latest_event.get("EventCategoryID")
+        )
+        if not current_state:
+            picking.delivery_state = "unknown"
+        else:
+            picking.delivery_state = current_state
+            picking.tracking_state = "%s>%s: (%s>%s) %s" % (
+                event.get("EventCategoryID"),
+                event.get("EventSubCategoryID"),
+                event.get("EventCategoryDescription"),
+                event.get("EventSubCategoryDescription"),
+                event.get("EventDescription"),
+            )
+        if current_state in ["customer_delivered", "warehouse_delivered"]:
+            picking.date_delivered = latest_event.get("DateTime")
 
     def whistl_tracking_state_calc_next_update(self, picking):
-        raise NotImplementedError("We didn't get to this bit yet")
         if picking.delivery_state in ["customer_delivered", "warehouse_delivered"]:
             return False
         return fields.datetime.now() + datetime.timedelta(hours=4)
-
-    def whistl_get_tracking_link(self, picking):
-        raise NotImplementedError("We didn't get to this bit yet")
-        return picking.whistl_tracking_url
