@@ -282,8 +282,8 @@ class DeliveryCarrier(models.Model):
                             "OriginCountry": picking.location_id.company_id.country_id.code
                             or "GB",
                             "Quantity": str(int(line.quantity)),
-                            "Value": str(line.product_id.lst_price * line.quantity),
-                            "Weight": str(line.product_id.weight * line.quantity),
+                            "Value": str(line.product_id.lst_price),
+                            "Weight": str(line.product_id.weight),
                             "HsCode": line.product_id.hs_code or "",
                         }
                     )
@@ -392,9 +392,13 @@ class DeliveryCarrier(models.Model):
 
             service_ids = service_xml.find("ns0:ServiceIds", ns)
             service_id = service_ids.find("ns0:ServiceId", ns)
+            service_uid = service_ids.find("ns0:ServiceCustomerUID", ns)
             provider_id = service_ids.find("ns0:ServiceProviderId", ns)
             service_info_xml = ET.SubElement(shipment, "ServiceInfo")
             ET.SubElement(service_info_xml, "ServiceId").text = service_id.text
+            ET.SubElement(
+                service_info_xml, "ServiceCustomerUID"
+            ).text = service_uid.text
             ET.SubElement(service_info_xml, "ServiceProviderId").text = provider_id.text
 
             # Send to Whistl
