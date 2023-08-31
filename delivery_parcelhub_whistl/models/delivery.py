@@ -21,6 +21,90 @@ WHISTL_DELIVERY_CODE_MAP = {
 }
 
 
+class WhistlAccess(models.Model):
+    _name = "whistl.access"
+
+    whistl_token = fields.Text(string="Whistl/Parcelhub Token")
+    whistl_refresh_token = fields.Char(string="Whistl/Parcelhub Refresh Token")
+    whistl_token_expiry = fields.Datetime(string="Whistl/Parcelhub Token Expiry")
+
+    def _get_whistl_headers(
+        self, with_auth=True, base_url=False, username=False, password=False
+    ):
+        self.ensure_one()
+        headers = {
+            "Content-Type": "application/xml; charset=utf-8",
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate",
+        }
+        if with_auth:
+            if not base_url or not username or not password:
+                raise ValidationError(
+                    _("Cannot get Whistl Headers without request details")
+                )
+            headers["Authorization"] = "Bearer %s" % self.whistl_get_auth_token(
+                base_url, username, password
+            )
+        return headers
+
+    def whistl_get_auth_token(self, base_url=False, username=False, password=False):
+        self.ensure_one()
+        if not base_url or not username or not password:
+            raise ValidationError(_("Cannot get Whistl Token without request details"))
+        request_url = urllib.parse.urljoin(base_url, "TokenV2")
+        now = fields.datetime.now()
+
+        if self.whistl_token and self.whistl_token_expiry > now + datetime.timedelta(
+            seconds=60
+        ):
+            # We already have a valid token
+            return self.whistl_token
+
+        if (
+            self.whistl_refresh_token
+            and self.whistl_token_expiry < now + datetime.timedelta(seconds=600)
+        ):
+            # Token expires in less than 30 minutes, refresh it
+            request = ET.Element("RequestToken")
+            ET.SubElement(request, "grant_type").text = "refreshtoken"
+            ET.SubElement(request, "username").text = self.whistl_refresh_token
+            ET.SubElement(request, "password").text = ""
+        else:
+            # Get a new token
+            request = ET.Element("RequestToken")
+            ET.SubElement(request, "grant_type").text = "bearer"
+            ET.SubElement(request, "username").text = username
+            ET.SubElement(request, "password").text = password
+
+        response = requests.post(
+            request_url,
+            headers=self._get_whistl_headers(False),
+            data=ET.tostring(request),
+            timeout=20,
+        )
+        if not response.status_code == 200:
+            message = ET.fromstring(response.content).find("Message").text
+            self.whistle_token = False
+            self.whistl_refresh_token = False
+            self.whistl_token_expiry = False
+            raise ValidationError(
+                _(
+                    "Whistl API Error Requesting Token. Please try again:"
+                    " {status_code}\n{message}"
+                ).format(status_code=response.status_code, message=message)
+            )
+
+        response_xml = ET.fromstring(response.content)
+
+        self.whistl_token = response_xml.find("access_token").text
+        self.whistl_refresh_token = response_xml.find("refreshToken").text
+        self.whistl_token_expiry = now + datetime.timedelta(
+            seconds=int(response_xml.find("expiresIn").text)
+        )
+
+        return self.whistl_token
+
+
 class DeliveryCarrier(models.Model):
     _inherit = "delivery.carrier"
 
@@ -32,9 +116,13 @@ class DeliveryCarrier(models.Model):
     whistl_username = fields.Char(string="Whistl/Parcelhub Username")
     whistl_password = fields.Char(string="Whistl/Parcelhub Password")
     whistl_account = fields.Char(string="Whistl/Parcelhub Account Ref")
-    whistl_token = fields.Text(string="Whistl/Parcelhub Token")
-    whistl_refresh_token = fields.Char(string="Whistl/Parcelhub Refresh Token")
-    whistl_token_expiry = fields.Datetime(string="Whistl/Parcelhub Token Expiry")
+
+    whistl_access = fields.Many2one(
+        "whistl.access", string="Whistl/Parcelhub Access Record"
+    )
+    whistl_token = fields.Text(related="whistl_access.whistl_token")
+    whistl_refresh_token = fields.Char(related="whistl_access.whistl_refresh_token")
+    whistl_token_expiry = fields.Datetime(related="whistl_access.whistl_token_expiry")
 
     whistl_tracking_api_key = fields.Char(
         string="Whistl/Parcelhub Tracking API Key",
@@ -71,6 +159,19 @@ class DeliveryCarrier(models.Model):
         default="6",
     )  # TODO: Flesh this out, or pull from API
 
+    def _search_create_access(self):
+        self.ensure_one()
+        if self.whistl_access:
+            return self.whistl_access
+        access = self.env["whistl.access"].sudo().search([])
+        if not access:
+            access = self.env["whistl.access"].sudo().create({})
+        self.whistl_access = access[0]
+        return access
+
+    def action_reset_tokens(self):
+        self.whistl_access.sudo().unlink()
+
     @api.depends("prod_environment")
     def _compute_whistl_base_url(self):
         for carrier in self:
@@ -97,72 +198,6 @@ class DeliveryCarrier(models.Model):
             url += "?" + urllib.parse.urlencode(args)
         return url
 
-    def _get_whistl_headers(self, with_auth=True):
-        self.ensure_one()
-        headers = {
-            "Content-Type": "application/xml; charset=utf-8",
-            "Accept": "*/*",
-            "Accept-Encoding": "gzip, deflate",
-        }
-        if with_auth:
-            headers["Authorization"] = "Bearer %s" % self.whistl_get_auth_token()
-        return headers
-
-    def whistl_get_auth_token(self):
-        request_url = self._get_whistl_url("TokenV2")
-
-        now = fields.datetime.now()
-
-        if self.whistl_token and self.whistl_token_expiry > now + datetime.timedelta(
-            seconds=60
-        ):
-            # We already have a valid token
-            return self.whistl_token
-
-        if (
-            self.whistl_refresh_token
-            and self.whistl_token_expiry < now + datetime.timedelta(seconds=600)
-        ):
-            # Token expires in less than 30 minutes, refresh it
-            request = ET.Element("RequestToken")
-            ET.SubElement(request, "grant_type").text = "refreshtoken"
-            ET.SubElement(request, "username").text = self.whistl_refresh_token
-            ET.SubElement(request, "password").text = ""
-        else:
-            # Get a new token
-            request = ET.Element("RequestToken")
-            ET.SubElement(request, "grant_type").text = "bearer"
-            ET.SubElement(request, "username").text = self.whistl_username
-            ET.SubElement(request, "password").text = self.whistl_password
-
-        response = requests.post(
-            request_url,
-            headers=self._get_whistl_headers(False),
-            data=ET.tostring(request),
-            timeout=20,
-        )
-        if not response.status_code == 200:
-            message = ET.fromstring(response.content).find("Message").text
-            self.whistle_token = False
-            self.whistl_refresh_token = False
-            self.whistl_token_expiry = False
-            raise ValidationError(
-                _(
-                    "Whistl API Error Requesting Token. Please try again:"
-                    " {status_code}\n{message}"
-                ).format(status_code=response.status_code, message=message)
-            )
-
-        response_xml = ET.fromstring(response.content)
-
-        self.whistl_token = response_xml.find("access_token").text
-        self.whistl_refresh_token = response_xml.find("refreshToken").text
-        self.whistl_token_expiry = now + datetime.timedelta(
-            seconds=int(response_xml.find("expiresIn").text)
-        )
-
-        return self.whistl_token
-
     def whistl_rate_shipment(self, order):
         matches = self._match_address(order.partner_shipping_id)
         if not matches:
@@ -188,8 +223,11 @@ class DeliveryCarrier(models.Model):
             ),
         }
 
-    def whistl_send_shipping(self, pickings):
+    def whistl_send_shipping(self, pickings):  # noqa: C901
         res = []
+        for record in self:
+            if not record.whistl_access:
+                record._search_create_access()
         for picking in pickings:
             order = picking.sale_id
 
@@ -328,9 +366,15 @@ class DeliveryCarrier(models.Model):
                 "Service/ServiceUsingServicePreference",
                 {"ServicePreferenceListId": self.whistl_service_preference_list},
             )
+
             response = requests.post(
                 request_url,
-                headers=self._get_whistl_headers(),
+                headers=self.whistl_access._get_whistl_headers(
+                    True,
+                    self.whistl_base_url,
+                    self.whistl_username,
+                    self.whistl_password,
+                ),
                 data=ET.tostring(shipment, xml_declaration=True, encoding="utf-8"),
                 timeout=20,
             )
@@ -361,7 +405,12 @@ class DeliveryCarrier(models.Model):
             )
             response = requests.post(
                 request_url,
-                headers=self._get_whistl_headers(),
+                headers=self.whistl_access._get_whistl_headers(
+                    True,
+                    self.whistl_base_url,
+                    self.whistl_username,
+                    self.whistl_password,
+                ),
                 data=ET.tostring(shipment, xml_declaration=True, encoding="utf-8"),
                 timeout=20,
             )
@@ -375,6 +424,8 @@ class DeliveryCarrier(models.Model):
 
             shipment_xml = objectify.fromstring(response.content)
             tracking = shipment_xml.ShippingInfo.CourierTrackingNumber.text
+            shipment_id = shipment_xml.ParcelhubShipmentId.text
+            picking.whistl_shipment_id = shipment_id
 
             attachments_list = []
             packages = shipment_xml.Packages
@@ -432,24 +483,32 @@ class DeliveryCarrier(models.Model):
         return res
 
     def whistl_cancel_shipment(self, pickings):
+        self.ensure_one()
+        if not self.whistl_access:
+            self._search_create_access()
         for picking in pickings:
-            request_url = self._get_whistl_url(
-                "Shipment/%s" % picking.carrier_consignment_ref,
+            # Get the Shipping ID first
+            request_url = self.with_context(whistl_skip_account=True)._get_whistl_url(
+                "Shipment/%s" % picking.whistl_shipment_id,
             )
             response = requests.delete(
                 request_url,
-                headers=self._get_whistl_headers(),
+                headers=self.whistl_access.sudo()._get_whistl_headers(
+                    True,
+                    self.whistl_base_url,
+                    self.whistl_username,
+                    self.whistl_password,
+                ),
                 timeout=20,
             )
-            if not response.status_code == 200:
+            if response.status_code not in [200, 204]:
                 message = ET.fromstring(response.content).find("Message").text
                 raise ValidationError(
                     _(
                         "Whistl API Error Cancelling Shipment: {status_code}\n{message}"
                     ).format(status_code=response.status_code, message=message)
                 )
-
-            picking.carrier_tracking_url = False
+            picking.state = "cancel"
 
     def whistl_tracking_state_update_scheduled(self):
         pickings = self.env["stock.picking"].search(
@@ -533,7 +592,7 @@ class DeliveryCarrier(models.Model):
                             ),
                         }
                     )
-        latest_event = sorted_events[-1]
+        latest_event = sorted_events[-1] if sorted_events else {}
         current_state = WHISTL_DELIVERY_CODE_MAP.get(
             latest_event.get("EventCategoryID")
         )
