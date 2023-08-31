@@ -596,7 +596,7 @@ class DeliveryCarrier(models.Model):
         current_state = WHISTL_DELIVERY_CODE_MAP.get(
             latest_event.get("EventCategoryID")
         )
-        if not current_state:
+        if not current_state and not picking.delivery_state:
             picking.delivery_state = "unknown"
         else:
             picking.delivery_state = current_state
