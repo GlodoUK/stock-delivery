@@ -405,6 +405,7 @@ class DeliveryCarrier(models.Model):
                     "RequestedLabelSize": self.whistl_label_size,
                 },
             )
+            data = ET.tostring(shipment, xml_declaration=True, encoding="utf-8")
             response = requests.post(
                 request_url,
                 headers=self.whistl_access._get_whistl_headers(
@@ -413,7 +414,7 @@ class DeliveryCarrier(models.Model):
                     self.whistl_username,
                     self.whistl_password,
                 ),
-                data=ET.tostring(shipment, xml_declaration=True, encoding="utf-8"),
+                data=data,
                 timeout=20,
             )
             if not response.status_code == 200:
@@ -421,7 +422,10 @@ class DeliveryCarrier(models.Model):
                 raise ValidationError(
                     _(
                         "Whistl API Error Sending Shipment: {status_code}\n{message}"
-                    ).format(status_code=response.status_code, message=message)
+                        "\n\n{shipment}"
+                    ).format(
+                        status_code=response.status_code, message=message, shipment=data
+                    )
                 )
 
             shipment_xml = objectify.fromstring(response.content)
