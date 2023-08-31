@@ -392,8 +392,10 @@ class DeliveryCarrier(models.Model):
 
             service_ids = service_xml.find("ns0:ServiceIds", ns)
             service_id = service_ids.find("ns0:ServiceId", ns)
+            provider_id = service_ids.find("ns0:ServiceProviderId", ns)
             service_info_xml = ET.SubElement(shipment, "ServiceInfo")
             ET.SubElement(service_info_xml, "ServiceId").text = service_id.text
+            ET.SubElement(service_info_xml, "ServiceProviderId").text = provider_id.text
 
             # Send to Whistl
             request_url = self._get_whistl_url(
