@@ -608,7 +608,9 @@ class DeliveryCarrier(models.Model):
                 event.get("EventDescription"),
             )
         if current_state in ["customer_delivered", "warehouse_delivered"]:
-            picking.date_delivered = latest_event.get("DateTime")
+            picking.date_delivered = picking.date_delivered or latest_event.get(
+                "DateTime"
+            )
 
     def whistl_tracking_state_calc_next_update(self, picking):
         if picking.delivery_state in ["customer_delivered", "warehouse_delivered"]:
