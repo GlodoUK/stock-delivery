@@ -337,7 +337,7 @@ class DeliveryCarrier(models.Model):
                     ET.SubElement(
                         item_declaration, "ProductDescription"
                     ).text = product.get("Description")
-                    ET.SubElement(item_declaration, "ProductSku").text = product.get(
+                    ET.SubElement(item_declaration, "ProductSKU").text = product.get(
                         "Sku"
                     )
                     ET.SubElement(
@@ -355,6 +355,13 @@ class DeliveryCarrier(models.Model):
                     ET.SubElement(
                         item_declaration, "ProductHarmonisedCode"
                     ).text = product.get("HsCode")
+
+            # Customs Declaration
+            customs_declaration = ET.SubElement(shipment, "CustomsDeclarationInfo")
+            ET.SubElement(
+                customs_declaration, "TermsOfTrade"
+            ).text = "DutiesAndTaxesUnpaid"
+            ET.SubElement(customs_declaration, "CategoryOfItem").text = "Sold"
 
             # Get Preferred Service
             preference_list_id = self.whistl_service_preference_list
