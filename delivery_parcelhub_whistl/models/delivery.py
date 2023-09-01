@@ -367,6 +367,7 @@ class DeliveryCarrier(models.Model):
                 {"ServicePreferenceListId": self.whistl_service_preference_list},
             )
 
+            data = ET.tostring(shipment, xml_declaration=True, encoding="utf-8")
             response = requests.post(
                 request_url,
                 headers=self.whistl_access._get_whistl_headers(
@@ -375,17 +376,30 @@ class DeliveryCarrier(models.Model):
                     self.whistl_username,
                     self.whistl_password,
                 ),
-                data=ET.tostring(shipment, xml_declaration=True, encoding="utf-8"),
+                data=data,
                 timeout=20,
             )
 
             if not response.status_code == 200:
                 message = ET.fromstring(response.content).find("Message").text
-                raise ValidationError(
-                    _(
-                        "Whistl API Error Requesting Service: {status_code}\n{message}"
-                    ).format(status_code=response.status_code, message=message)
-                )
+                if self.user_has_groups("base.group_no_one"):
+                    raise ValidationError(
+                        _(
+                            "Whistl API Error Requesting Service Preference: "
+                            "{status_code}\n{message}\n\n{shipment}"
+                        ).format(
+                            status_code=response.status_code,
+                            message=message,
+                            shipment=data,
+                        )
+                    )
+                else:
+                    raise ValidationError(
+                        _(
+                            "Whistl API Error Requesting Service Preference :"
+                            "{status_code}\n{message}"
+                        ).format(status_code=response.status_code, message=message)
+                    )
 
             service_xml = ET.fromstring(response.content)
             ns = {"ns0": WHISLT_XMLNS}
@@ -423,14 +437,23 @@ class DeliveryCarrier(models.Model):
             )
             if not response.status_code == 200:
                 message = ET.fromstring(response.content).find("Message").text
-                raise ValidationError(
-                    _(
-                        "Whistl API Error Sending Shipment: {status_code}\n{message}"
-                        "\n\n{shipment}"
-                    ).format(
-                        status_code=response.status_code, message=message, shipment=data
+                if self.user_has_groups("base.group_no_one"):
+                    raise ValidationError(
+                        _(
+                            "Whistl API Error Sending Shipment: {status_code}\n{message}"
+                            "\n\n{shipment}"
+                        ).format(
+                            status_code=response.status_code,
+                            message=message,
+                            shipment=data,
+                        )
                     )
-                )
+                else:
+                    raise ValidationError(
+                        _(
+                            "Whistl API Error Sending Shipment: {status_code}\n{message}"
+                        ).format(status_code=response.status_code, message=message)
+                    )
 
             shipment_xml = objectify.fromstring(response.content)
             tracking = shipment_xml.ShippingInfo.CourierTrackingNumber.text
