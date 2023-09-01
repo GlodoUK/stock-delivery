@@ -16,7 +16,7 @@ WHISTL_DELIVERY_CODE_MAP = {
     "3": "in_transit",
     "4": "incident",
     "5": "held",
-    "7": "unknown",
+    "7": "in_transit",
     "8": "held",
 }
 
@@ -577,7 +577,7 @@ class DeliveryCarrier(models.Model):
         )
         request = ET.Element("GetTrackingHistoryRequest")
         auth = ET.SubElement(request, "Authentication")
-        ET.SubElement(auth, "AccountId").text = self.whistl_account
+        ET.SubElement(auth, "AccountID").text = self.whistl_account
         ET.SubElement(auth, "AccessCode").text = self.whistl_tracking_api_key
         ET.SubElement(request, "SearchType").text = "ByTrackingNumber"
         ET.SubElement(request, "SearchTerm").text = picking.carrier_tracking_ref
@@ -598,7 +598,7 @@ class DeliveryCarrier(models.Model):
             )
 
         tracking_response = ET.fromstring(response.content)
-        events = tracking_response.findall("TrackingEvent")
+        events = tracking_response.findall(".//TrackingEvent")
 
         sorted_events = []
         for event in events:
