@@ -507,6 +507,7 @@ class DeliveryCarrier(models.Model):
                 {
                     "carrier_consignment_ref": picking.name,
                     "whistl_carrier": "%s: %s" % (carrier_name, service_name),
+                    "delivery_state": "in_transit",
                 }
             )
             self.whistl_tracking_state_update(picking)
@@ -638,9 +639,7 @@ class DeliveryCarrier(models.Model):
         current_state = WHISTL_DELIVERY_CODE_MAP.get(
             latest_event.get("EventCategoryID")
         )
-        if not current_state:
-            picking.delivery_state = picking.delivery_state or "unknown"
-        else:
+        if current_state:
             picking.delivery_state = current_state
             picking.tracking_state = "%s>%s: (%s>%s) %s" % (
                 event.get("EventCategoryID"),
