@@ -621,7 +621,7 @@ class DeliveryCarrier(models.Model):
                     self.env["stock.picking.tracking.history"].create(
                         {
                             "picking_id": picking.id,
-                            "date_event": datetime.strptime(
+                            "date_event": datetime.datetime.strptime(
                                 event.get("EventTimestamp"), "%Y-%m-%dT%H:%M:%S"
                             ),
                             "description": "%s>%s: (%s>%s) %s"
