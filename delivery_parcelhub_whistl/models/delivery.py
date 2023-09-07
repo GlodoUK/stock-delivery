@@ -278,7 +278,7 @@ class DeliveryCarrier(models.Model):
                     product_list.append(
                         {
                             "Description": line.product_id.name,
-                            "Sku": line.product_id.default_code,
+                            "Sku": line.product_id.default_code.replace("#", "-"),
                             "OriginCountry": picking.location_id.company_id.country_id.code
                             or "GB",
                             "Quantity": str(int(line.quantity)),
