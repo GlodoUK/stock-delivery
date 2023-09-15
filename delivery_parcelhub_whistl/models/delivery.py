@@ -625,33 +625,34 @@ class DeliveryCarrier(models.Model):
                             "date_event": datetime.datetime.strptime(
                                 event.get("EventTimestamp"), "%Y-%m-%dT%H:%M:%S"
                             ),
-                            "description": "%s>%s: (%s>%s) %s"
+                            "description": "%s%s%s: (%s>%s) %s"
                             % (
                                 event.get("EventCategoryID"),
                                 event.get("EventSubCategoryID"),
-                                event.get("EventCategoryDescription"),
+                                event.get("EventCategoryDescription") or "",
+                                ">" if event.get("EventCategoryDescription") else "",
                                 event.get("EventSubCategoryDescription"),
                                 event.get("EventDescription"),
                             ),
                         }
                     )
-        latest_event = sorted_events[-1] if sorted_events else {}
-        current_state = WHISTL_DELIVERY_CODE_MAP.get(
-            latest_event.get("EventCategoryID")
-        )
-        if current_state:
-            picking.delivery_state = current_state
-            picking.tracking_state = "%s>%s: (%s>%s) %s" % (
-                event.get("EventCategoryID"),
-                event.get("EventSubCategoryID"),
-                event.get("EventCategoryDescription"),
-                event.get("EventSubCategoryDescription"),
-                event.get("EventDescription"),
+            latest_event = sorted_events[-1] if sorted_events else {}
+            current_state = WHISTL_DELIVERY_CODE_MAP.get(
+                latest_event.get("EventCategoryID")
             )
-        if current_state in ["customer_delivered", "warehouse_delivered"]:
-            picking.date_delivered = picking.date_delivered or latest_event.get(
-                "DateTime"
-            )
+            if current_state:
+                picking.delivery_state = current_state
+                picking.tracking_state = "%s>%s: (%s>%s) %s" % (
+                    latest_event.get("EventCategoryID"),
+                    latest_event.get("EventSubCategoryID"),
+                    latest_event.get("EventCategoryDescription"),
+                    latest_event.get("EventSubCategoryDescription"),
+                    latest_event.get("EventDescription"),
+                )
+                if current_state in ["customer_delivered", "warehouse_delivered"]:
+                    picking.date_delivered = picking.date_delivered or latest_event.get(
+                        "DateTime"
+                    )
 
     def whistl_tracking_state_calc_next_update(self, picking):
         if picking.delivery_state in ["customer_delivered", "warehouse_delivered"]:
