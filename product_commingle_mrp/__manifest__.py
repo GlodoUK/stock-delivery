@@ -6,6 +6,9 @@
     "category": "Uncategorized",
     "version": "15.0.1.0.0",
     "depends": ["product_commingle", "mrp"],
-    "data": [],
+    "data": [
+        "views/mrp_bom.xml",
+    ],
     "license": "AGPL-3",
+    "auto_install": True,
 }

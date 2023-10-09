@@ -70,3 +70,17 @@ class SaleOrderLine(models.Model):
                     "message": _("This product will split into %s lines") % len(lines),
                 }
             }
+
+    def _get_qty_procurement(self, previous_product_uom_qty=False):
+        self.ensure_one()
+        qty = 0.0
+        outgoing_moves, incoming_moves = self._get_outgoing_incoming_moves()
+        for move in outgoing_moves:
+            qty += move.product_uom._compute_quantity(
+                move.product_uom_qty, self.product_uom, rounding_method="HALF-UP"
+            )
+        for move in incoming_moves:
+            qty -= move.product_uom._compute_quantity(
+                move.product_uom_qty, self.product_uom, rounding_method="HALF-UP"
+            )
+        return qty
