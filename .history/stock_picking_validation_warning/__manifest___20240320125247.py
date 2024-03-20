@@ -4,7 +4,7 @@
     "author": "Glo Networks",
     "website": "https://github.com/GlodoUK/stock-delivery",
     "category": "Uncategorized",
-    "version": "17.0.1.0.0",
+    "version": "15.0.1.0.0",
     "depends": ["stock"],
     "data": [
         "security/ir.model.access.csv",
