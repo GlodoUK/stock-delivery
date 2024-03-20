@@ -1,0 +1,2 @@
+# generated from manifests external_dependencies
+git+https://github.com/GlodoUK/sale@15.0#subdirectory=setup/sale_order_hold
