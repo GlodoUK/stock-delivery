@@ -1,3 +1,15 @@
+<<<<<<< before updating
+=======
+
+<!-- /!\ Non OCA Context : Set here the badge of your runbot / runboat instance. -->
+[![Pre-commit Status](https://github.com/GlodoUK/stock-delivery/actions/workflows/pre-commit.yml/badge.svg?branch=17.0)](https://github.com/GlodoUK/stock-delivery/actions/workflows/pre-commit.yml?query=branch%3A17.0)
+[![Build Status](https://github.com/GlodoUK/stock-delivery/actions/workflows/test.yml/badge.svg?branch=17.0)](https://github.com/GlodoUK/stock-delivery/actions/workflows/test.yml?query=branch%3A17.0)
+[![codecov](https://codecov.io/gh/GlodoUK/stock-delivery/branch/17.0/graph/badge.svg)](https://codecov.io/gh/GlodoUK/stock-delivery)
+<!-- /!\ Non OCA Context : Set here the badge of your translation instance. -->
+
+<!-- /!\ do not modify above this line -->
+
+>>>>>>> after updating
 # Stock and Delivery related addons for Odoo
 
 This project aims to deal with any generalised modules related to stock, warehousing and logistics of Odoo.

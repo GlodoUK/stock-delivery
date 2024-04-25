@@ -1,6 +1,7 @@
 # Do NOT update manually; changes here will be overwritten by Copier
 _commit: v1.20
 _src_path: https://github.com/OCA/oca-addons-repo-template.git
+additional_ruff_rules: []
 ci: GitHub
 convert_readme_fragments_to_markdown: false
 generate_requirements_txt: true
@@ -13,7 +14,7 @@ github_enable_stale_action: false
 github_enforce_dev_status_compatibility: false
 include_wkhtmltopdf: false
 odoo_test_flavor: Both
-odoo_version: 15.0
+odoo_version: 17.0
 org_name: Glo Networks
 org_slug: GlodoUK
 rebel_module_groups: []
@@ -22,6 +23,6 @@ repo_description: This project aims to deal with any generalised modules related
 repo_name: Stock and Delivery related addons for Odoo
 repo_slug: stock-delivery
 repo_website: https://github.com/GlodoUK/stock-delivery
-use_pyproject_toml: false
-use_ruff: false
+use_pyproject_toml: true
+use_ruff: true
 
