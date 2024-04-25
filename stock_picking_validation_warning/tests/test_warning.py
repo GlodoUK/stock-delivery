@@ -53,15 +53,14 @@ class TestWarning(TransactionCase):
                 "picking_type_id": self.picking_type_out.id,
                 "location_id": self.location.id,
                 "location_dest_id": self.customer_location.id,
-                "move_lines": [
+                "move_line_ids": [
                     (
                         0,
                         0,
                         {
-                            "name": self.product.name,
                             "product_id": self.product.id,
-                            "product_uom": self.product.uom_id.id,
-                            "product_uom_qty": 1,
+                            "product_uom_id": self.product.uom_id.id,
+                            "quantity_product_uom": 1,
                             "location_dest_id": self.customer_location.id,
                             "location_id": self.location.id,
                         },
@@ -89,15 +88,14 @@ class TestWarning(TransactionCase):
                 "picking_type_id": self.picking_type_out.id,
                 "location_id": self.location.id,
                 "location_dest_id": self.customer_location.id,
-                "move_lines": [
+                "move_line_ids": [
                     (
                         0,
                         0,
                         {
-                            "name": self.product.name,
                             "product_id": self.product.id,
-                            "product_uom": self.product.uom_id.id,
-                            "product_uom_qty": 1,
+                            "product_uom_id": self.product.uom_id.id,
+                            "quantity_product_uom": 1,
                             "location_id": self.location.id,
                             "location_dest_id": self.customer_location.id,
                         },
