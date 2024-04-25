@@ -5,15 +5,15 @@
         <field name="model">stock.picking.warning</field>
         <field name="arch" type="xml">
             <form string="Partner Warning!">
-                    <field name="msg" />
-                    <field name="should_block" invisible="1" />
+                <field name="msg" />
+                <field name="should_block" invisible="1" />
                 <footer>
                     <button
                         name="process"
                         string="Continue"
                         type="object"
                         class="btn-primary"
-                        attrs="{'invisible': [('should_block', '=', True)]}"
+                        invisible="[('should_block', '=', True)]"
                     />
                     <button string="Close" class="btn-secondary" special="cancel" />
                 </footer>
