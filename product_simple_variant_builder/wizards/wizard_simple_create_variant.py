@@ -14,7 +14,7 @@ class WizardSimpleCreateVariant(models.TransientModel):
     )
     variants_to_create = fields.Integer(compute="_compute_variants_to_create")
     line_ids = fields.One2many(
-        comodel_name="wizard.create.variant.line",
+        comodel_name="wizard.simple.create.variant.line",
         inverse_name="wizard_id",
         string="Lines",
         required=False,
@@ -46,7 +46,7 @@ class WizardSimpleCreateVariant(models.TransientModel):
 
     @api.onchange("product_tmpl_id")
     def _onchange_product_tmpl(self):
-        line_model = self.env["wizard.create.variant.line"]
+        line_model = self.env["wizard.simple.create.variant.line"]
         if self.product_tmpl_id:
             lines = line_model.browse()
             pending_variants = self.product_tmpl_id.attribute_line_ids
@@ -133,11 +133,11 @@ class WizardSimpleCreateVariant(models.TransientModel):
 
 
 class WizardCreateVariantLine(models.TransientModel):
-    _name = "wizard.create.variant.line"
+    _name = "wizard.simple.create.variant.line"
     _description = "Wizard Create Variant Line"
 
     wizard_id = fields.Many2one(
-        comodel_name="wizard.create.variant",
+        comodel_name="wizard.simple.create.variant",
         string="Wizard",
         required=False,
     )
