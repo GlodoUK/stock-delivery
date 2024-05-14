@@ -1,5 +1,5 @@
 {
-    "name": "bom_auto_map_components",
+    "name": "bom_auto_create_components",
     "summary": """
         Wizard to create BoM component lines based on matching product attributes""",
     "author": "Glo Networks",
