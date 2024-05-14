@@ -18,15 +18,18 @@ class WizardSimpleCreateVariant(models.TransientModel):
         inverse_name="wizard_id",
         string="Lines",
         required=False,
+        readonly=False,
     )
     component_product_id = fields.Many2one(
         comodel_name="product.template",
         required=True,
+        domain="[('id', '!=', product_tmpl_id)]",
     )
 
     @api.depends(
         "product_tmpl_id",
         "line_ids.selected_value_ids",
+        "component_product_id",
     )
     def _compute_variants_to_create(self):
         for rec in self:
@@ -45,27 +48,47 @@ class WizardSimpleCreateVariant(models.TransientModel):
     @api.model
     def default_get(self, fields_list):
         values = super().default_get(fields_list)
-        values["product_tmpl_id"] = self.env.context.get("active_id")
+        bom = self.env["mrp.bom"].browse(self.env.context.get("active_id"))
+        values["product_tmpl_id"] = bom.product_tmpl_id.id
         return values
 
-    @api.onchange("product_tmpl_id")
+    @api.onchange("product_tmpl_id", "component_product_id")
     def _onchange_product_tmpl(self):
         line_model = self.env["wizard.bom.create.components.line"]
-        if self.product_tmpl_id:
+        if self.product_tmpl_id and self.component_product_id:
             lines = line_model.browse()
-            pending_variants = self.product_tmpl_id.attribute_line_ids
+            pending_variants = self.product_tmpl_id.attribute_line_ids.filtered(
+                lambda line: line.attribute_id
+                in self.component_product_id.attribute_line_ids.mapped("attribute_id")
+            )
+            pending_values = pending_variants.mapped("value_ids").filtered(
+                lambda value: value
+                in self.component_product_id.attribute_line_ids.value_ids
+            )
             for line_data in [
                 {
                     "attribute_id": attribute_line.attribute_id.id,
                     "required": attribute_line.required,
                     "attribute_value_ids": [
-                        (6, 0, [int(v_id) for v_id in attribute_line.value_ids.ids])
+                        (
+                            6,
+                            0,
+                            [
+                                int(v_id)
+                                for v_id in attribute_line.value_ids.filtered(
+                                    lambda line: line.id in pending_values.ids
+                                ).ids
+                            ],
+                        )
                     ],
                 }
                 for attribute_line in pending_variants
             ]:
                 lines |= line_model.new(line_data)
             self.line_ids = lines
+
+    def action_create_components(self):
+        pass
 
     def action_create_variants(self):
         """Create variant of product based on selected attributes values in wizard"""
@@ -153,7 +176,8 @@ class WizardCreateVariantLine(models.TransientModel):
         relation="wizard_bom_create_components_line_value_rel",
         column1="wizard_line_id",
         column2="value_id",
-        string="Attribute Values",
+        string="Matching Values",
+        readonly=True,
     )
     selected_value_ids = fields.Many2many(
         comodel_name="product.attribute.value",
@@ -162,4 +186,7 @@ class WizardCreateVariantLine(models.TransientModel):
         column2="value_id",
         string="Selected Values",
     )
-    required = fields.Boolean(string="Required?", required=False)
+    required = fields.Boolean(
+        string="Required?",
+        required=False,
+    )

@@ -6,7 +6,7 @@
     "website": "https://github.com/GlodoUK/stock-delivery",
     "category": "Inventory",
     "version": "17.0.1.0.0",
-    "depends": ["product", "product_variant_configurator"],
+    "depends": ["product", "product_variant_configurator", "mrp"],
     "data": [
         "security/ir.model.access.csv",
         "wizards/wizard_bom_create_components.xml",
