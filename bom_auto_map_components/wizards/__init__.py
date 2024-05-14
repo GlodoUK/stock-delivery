@@ -1,1 +1,1 @@
-from . import wizard_simple_create_variant
+from . import wizard_bom_create_components
