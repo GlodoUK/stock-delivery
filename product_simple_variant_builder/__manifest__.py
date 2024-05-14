@@ -3,7 +3,7 @@
     "summary": """
         Simple wizard to build dynamic variants from a product template""",
     "author": "Glo Networks",
-    "website": "https://glo.systems",
+    "website": "https://github.com/GlodoUK/stock-delivery",
     "category": "Inventory",
     "version": "17.0.1.0.0",
     "depends": ["product", "product_variant_configurator"],
@@ -13,5 +13,5 @@
         "views/product_template_view.xml",
     ],
     "demo": [],
-    "license": "Other proprietary",
+    "license": "AGPL-3",
 }
