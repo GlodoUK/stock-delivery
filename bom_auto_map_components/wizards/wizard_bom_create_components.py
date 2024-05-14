@@ -87,76 +87,107 @@ class WizardSimpleCreateVariant(models.TransientModel):
                 lines |= line_model.new(line_data)
             self.line_ids = lines
 
+    def fetch_variant_from_combination(self, product_template, combination_ids):
+        all_variants = product_template.product_variant_ids
+        existing_variants = {
+            variant.product_template_attribute_value_ids: variant
+            for variant in all_variants
+        }
+        combination = self.env["product.template.attribute.value"]
+        for value in product_template.valid_product_template_attribute_line_ids.mapped(
+            "product_template_value_ids"
+        ):
+            if value.product_attribute_value_id.id in combination_ids:
+                combination |= value
+        is_combination_possible = product_template._is_combination_possible_by_config(
+            combination, ignore_no_variant=False
+        )
+        if not is_combination_possible:
+            return False
+        if combination in existing_variants:
+            return existing_variants[combination]
+        return False
+
     def action_create_components(self):
-        pass
+        self.action_create_variants()
+        bom = self.env["mrp.bom"].browse(self.env.context.get("active_id"))
+        # Create Bom Component Lines for all attribute value combinations
+        for combination in self._get_combinations():
+            component_variant = self.fetch_variant_from_combination(
+                self.component_product_id, combination
+            )
+            for component_variant_id in component_variant:
+                self.env["mrp.bom.line"].create(
+                    {
+                        "product_id": component_variant_id.id,
+                        "product_qty": 1.0,
+                        "bom_id": bom.id,
+                        "bom_product_template_attribute_value_ids": [
+                            (6, 0, combination)
+                        ],
+                    }
+                )
+        return {"type": "ir.actions.act_window_close"}
 
     def action_create_variants(self):
         """Create variant of product based on selected attributes values in wizard"""
         product_model = self.env["product.product"]
         attribute_value_model = self.env["product.template.attribute.value"]
-        current_variants_to_create = []
-        current_variants_to_activate = product_model.browse()
-        variants_to_show = product_model.browse()
-        product_tmpl = self.product_tmpl_id
-        all_variants = product_tmpl.with_context(
-            active_test=False
-        ).product_variant_ids.sorted(lambda p: (p.active, -p.id))
-        existing_variants = {
-            variant.product_template_attribute_value_ids: variant
-            for variant in all_variants
-        }
-        for combination_ids in self._get_combinations():
-            combination = attribute_value_model.browse()
-            for value in product_tmpl.valid_product_template_attribute_line_ids.mapped(
-                "product_template_value_ids"
-            ):
-                if value.product_attribute_value_id.id in combination_ids:
-                    combination |= value
-            is_combination_possible = product_tmpl._is_combination_possible_by_config(
-                combination, ignore_no_variant=False
-            )
-            if not is_combination_possible:
-                continue
-            if combination in existing_variants:
-                current_variants_to_activate += existing_variants[combination]
-            elif (
-                existing_variants
-                and len(existing_variants) == 1
-                and not all_variants.product_template_attribute_value_ids
-            ):
-                variants_to_show += all_variants
-                all_variants.write(
-                    {"product_template_attribute_value_ids": [(6, 0, combination.ids)]}
+        product_tmpl_ids = self.product_tmpl_id + self.component_product_id
+        for product_tmpl in product_tmpl_ids:
+            current_variants_to_create = []
+            current_variants_to_activate = product_model.browse()
+            all_variants = product_tmpl.with_context(
+                active_test=False
+            ).product_variant_ids.sorted(lambda p: (p.active, -p.id))
+            existing_variants = {
+                variant.product_template_attribute_value_ids: variant
+                for variant in all_variants
+            }
+            for combination_ids in self._get_combinations():
+                combination = attribute_value_model.browse()
+                for (
+                    value
+                ) in product_tmpl.valid_product_template_attribute_line_ids.mapped(
+                    "product_template_value_ids"
+                ):
+                    if value.product_attribute_value_id.id in combination_ids:
+                        combination |= value
+                is_combination_possible = (
+                    product_tmpl._is_combination_possible_by_config(
+                        combination, ignore_no_variant=False
+                    )
                 )
-            else:
-                current_variants_to_create.append(
-                    {
-                        "product_tmpl_id": product_tmpl.id,
-                        "product_template_attribute_value_ids": [
-                            (6, 0, combination.ids)
-                        ],
-                        "active": product_tmpl.active,
-                    }
-                )
-        if current_variants_to_activate:
-            variants_to_show |= current_variants_to_activate
-            current_variants_to_activate.write({"active": True})
-        if current_variants_to_create:
-            variants_to_show |= product_model.create(current_variants_to_create)
-        if variants_to_show:
-            action = self.env.ref("product.product_variant_action").read()[0]
-            action.update(
-                {
-                    "domain": [("id", "in", variants_to_show.ids)],
-                    "context": {
-                        "search_default_product_tmpl_id": [product_tmpl.id],
-                        "default_product_tmpl_id": product_tmpl.id,
-                        "create": False,
-                    },
-                }
-            )
-            return action
-        return {"type": "ir.actions.act_window_close"}
+                if not is_combination_possible:
+                    continue
+                if combination in existing_variants:
+                    current_variants_to_activate += existing_variants[combination]
+                elif (
+                    existing_variants
+                    and len(existing_variants) == 1
+                    and not all_variants.product_template_attribute_value_ids
+                ):
+                    all_variants.write(
+                        {
+                            "product_template_attribute_value_ids": [
+                                (6, 0, combination.ids)
+                            ]
+                        }
+                    )
+                else:
+                    current_variants_to_create.append(
+                        {
+                            "product_tmpl_id": product_tmpl.id,
+                            "product_template_attribute_value_ids": [
+                                (6, 0, combination.ids)
+                            ],
+                            "active": product_tmpl.active,
+                        }
+                    )
+            if current_variants_to_activate:
+                current_variants_to_activate.write({"active": True})
+            if current_variants_to_create:
+                product_model.create(current_variants_to_create)
 
 
 class WizardCreateVariantLine(models.TransientModel):
