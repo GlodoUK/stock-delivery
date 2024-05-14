@@ -10,7 +10,7 @@
                 <button
                     name="%(wizard_simple_create_variant_action)d"
                     type="action"
-                    string="Create Variant"
+                    string="Create Variant(s)"
                     invisible="not has_configurable_attributes"
                 />
             </xpath>
