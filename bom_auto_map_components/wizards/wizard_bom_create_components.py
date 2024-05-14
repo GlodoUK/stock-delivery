@@ -21,7 +21,6 @@ class WizardSimpleCreateVariant(models.TransientModel):
     )
     component_product_id = fields.Many2one(
         comodel_name="product.template",
-        string="Component Product",
         required=True,
     )
 
@@ -151,14 +150,14 @@ class WizardCreateVariantLine(models.TransientModel):
     )
     attribute_value_ids = fields.Many2many(
         comodel_name="product.attribute.value",
-        relation="wizard_create_variant_line_value_rel",
+        relation="wizard_bom_create_components_line_value_rel",
         column1="wizard_line_id",
         column2="value_id",
         string="Attribute Values",
     )
     selected_value_ids = fields.Many2many(
         comodel_name="product.attribute.value",
-        relation="wizard_create_variant_line_selected_value_rel",
+        relation="wizard_bom_create_components_line_selected_value_rel",
         column1="wizard_line_id",
         column2="value_id",
         string="Selected Values",
