@@ -576,7 +576,9 @@ class DeliveryCarrier(models.Model):
                 continue
             self.whistl_tracking_state_update(picking)
         if self._whistl_get_waiting_pickings():
-            self.with_delay().whistl_tracking_state_update_scheduled()
+            self.with_delay().whistl_tracking_state_update_scheduled(
+                batch_size=batch_size
+            )
 
     def whistl_tracking_state_update(self, picking):
         request_url = self._get_whistl_tracking_url(
