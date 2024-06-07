@@ -551,8 +551,8 @@ class DeliveryCarrier(models.Model):
                 )
             picking.state = "cancel"
 
-    def whistl_tracking_state_update_scheduled(self):
-        pickings = self.env["stock.picking"].search(
+    def _whistl_get_waiting_pickings(self, limit=100):
+        return self.env["stock.picking"].search(
             [
                 ("carrier_id", "=", self.id),
                 ("state", "=", "done"),
@@ -565,12 +565,18 @@ class DeliveryCarrier(models.Model):
                 "|",
                 ("carrier_consignment_ref", "!=", False),
                 ("carrier_tracking_ref", "!=", False),
-            ]
+            ],
+            limit=limit,  # Added this to fix timeouts etc
         )
+
+    def whistl_tracking_state_update_scheduled(self, batch_size=100):
+        pickings = self._whistl_get_waiting_pickings(limit=batch_size)
         for picking in pickings:
             if picking.delivery_state in ["customer_delivered", "warehouse_delivered"]:
                 continue
             self.whistl_tracking_state_update(picking)
+        if self._whistl_get_waiting_pickings():
+            self.with_delay().whistl_tracking_state_update_scheduled()
 
     def whistl_tracking_state_update(self, picking):
         request_url = self._get_whistl_tracking_url(
