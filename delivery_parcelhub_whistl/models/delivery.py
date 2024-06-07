@@ -607,7 +607,8 @@ class DeliveryCarrier(models.Model):
             )
 
         try:
-            tracking_response = ET.fromstring(response.content.decode("utf8"))
+            response_content = response.content.decode().replace("&#x10;", "&#10;")
+            tracking_response = ET.fromstring(response_content)
         except Exception as e:
             raise ValidationError(
                 _(
