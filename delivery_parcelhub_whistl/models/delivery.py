@@ -604,7 +604,19 @@ class DeliveryCarrier(models.Model):
                 ).format(status_code=response.status_code, message=message)
             )
 
-        tracking_response = ET.fromstring(response.content)
+        try:
+            tracking_response = ET.fromstring(response.content)
+        except Exception as e:
+            raise ValidationError(
+                _(
+                    "Failed to get tracking information for picking %(picking_name)s\n\n"
+                    "Response:\n%(response_content)s"
+                )
+                % {
+                    "picking_name": picking.name,
+                    "response_content": response.content,
+                }
+            ) from e
         events = tracking_response.findall(".//TrackingEvent")
 
         sorted_events = []
