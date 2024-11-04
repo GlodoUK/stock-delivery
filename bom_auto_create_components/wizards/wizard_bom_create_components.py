@@ -117,16 +117,14 @@ class WizardSimpleCreateVariant(models.TransientModel):
                 self.component_product_id, combination
             )
             for component_variant_id in component_variant:
-                self.env["mrp.bom.line"].create(
+                bom_line = self.env["mrp.bom.line"].create(
                     {
                         "product_id": component_variant_id.id,
                         "product_qty": 1.0,
                         "bom_id": bom.id,
-                        "bom_product_template_attribute_value_ids": [
-                            (6, 0, combination)
-                        ],
                     }
                 )
+                bom_line._onchange_set_apply_variant()
         return {"type": "ir.actions.act_window_close"}
 
     def action_create_variants(self):
