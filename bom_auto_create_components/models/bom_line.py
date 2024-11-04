@@ -13,7 +13,7 @@ class MrpBomLine(models.Model):
                 )
             )
             product_tmpl_att_lines = (
-                self.bom_id.product_tmpl_id.valid_product_template_attribute_line_id
+                self.bom_id.product_tmpl_id.valid_product_template_attribute_line_ids
             )
             product_tmpl_att_values = product_tmpl_att_lines.mapped(
                 "product_template_value_ids"
