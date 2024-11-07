@@ -50,6 +50,9 @@ class WizardSimpleCreateVariant(models.TransientModel):
         if self.product_tmpl_id:
             lines = line_model.browse()
             pending_variants = self.product_tmpl_id.attribute_line_ids
+            pending_variants = pending_variants.filtered(
+                lambda tmpl_att_line: tmpl_att_line.attribute_id.display_type != "multi"
+            )
             for line_data in [
                 {
                     "attribute_id": attribute_line.attribute_id.id,
@@ -142,7 +145,9 @@ class WizardCreateVariantLine(models.TransientModel):
         required=False,
     )
     attribute_id = fields.Many2one(
-        comodel_name="product.attribute", string="Attribute", required=False
+        comodel_name="product.attribute",
+        string="Attribute",
+        required=False,
     )
     attribute_value_ids = fields.Many2many(
         comodel_name="product.attribute.value",
