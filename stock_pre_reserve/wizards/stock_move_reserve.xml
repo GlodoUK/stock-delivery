@@ -19,7 +19,7 @@
                         <page string="Candidates to reserve against">
                             <field name="candidate_move_ids">
                                 <tree editable="top" create="false" edit="true">
-                                    <field name="selected" widget="boolean_toggle"/>
+                                    <field name="selected" />
                                     <field name="src_move_id" readonly="1" force_save="1"/>
                                     <field name="max_qty" readonly="1" force_save="1"/>
                                     <field name="src_move_uom" readonly="1"/>
