@@ -35,7 +35,7 @@ class StockMoveFuture(models.TransientModel):
                 record.move_required = 0.0
                 continue
             record.move_required = (
-                record.move_id.product_uom_qty - record.move_id.reserved_availability
+                record.move_id.product_uom_qty - record.move_id.quantity
             )
 
     move_uom = fields.Many2one(related="move_id.product_uom", store=False)
@@ -60,7 +60,7 @@ class StockMoveFuture(models.TransientModel):
                     "max_qty": candidate.product_uom_qty
                     - sum(
                         candidate.move_dest_ids.mapped(
-                            lambda c: c.product_uom_qty - c.reserved_availability
+                            lambda c: c.product_uom_qty - c.quantity
                         )
                     ),
                     "date": candidate.date,
