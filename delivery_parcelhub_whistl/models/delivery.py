@@ -592,6 +592,7 @@ class DeliveryCarrier(models.Model):
                 "Content-Type": "application/xml",
             },
             data=ET.tostring(request, xml_declaration=True, encoding="utf-8"),
+            timeout=20,
         )
         if not response.status_code == 200:
             message = ET.fromstring(response.content).find("Message").text
@@ -602,7 +603,11 @@ class DeliveryCarrier(models.Model):
             )
 
         try:
-            response_content = response.content.decode().replace("&#x10;", "&#10;")
+            response_content = (
+                response.content.decode()
+                .replace("&#x10;", "&#10;")
+                .replace("&#x19;", "&#19;")
+            )
             tracking_response = ET.fromstring(response_content)
         except Exception as e:
             raise ValidationError(
