@@ -592,6 +592,7 @@ class DeliveryCarrier(models.Model):
                 "Content-Type": "application/xml",
             },
             data=ET.tostring(request, xml_declaration=True, encoding="utf-8"),
+            timeout=20,
         )
         if not response.status_code == 200:
             message = ET.fromstring(response.content).find("Message").text
