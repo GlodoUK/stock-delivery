@@ -558,14 +558,25 @@ class DeliveryCarrier(models.Model):
                 ("state", "=", "done"),
                 (
                     "delivery_state",
-                    "not in",
-                    ["customer_delivered", "warehouse_delivered"],
+                    "in",
+                    [
+                        False,
+                        "",
+                        "unknown",
+                        "shipping_recorded_in_carrier",
+                        "in_transit",
+                        "incident",
+                        "held",
+                    ],
                 ),
+                ("create_date", ">=", fields.Datetime.now() - datetime.timedelta(weeks=8)),
                 ("date_next_tracking_update", "<=", fields.datetime.now()),
                 "|",
                 ("carrier_consignment_ref", "!=", False),
                 ("carrier_tracking_ref", "!=", False),
-            ]
+            ], 
+            order="date_next_tracking_update ASC", 
+            limit=200
         )
 
     def whistl_tracking_state_update_scheduled(self):
