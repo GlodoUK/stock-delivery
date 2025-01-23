@@ -566,7 +566,9 @@ class DeliveryCarrier(models.Model):
                 "|",
                 ("carrier_consignment_ref", "!=", False),
                 ("carrier_tracking_ref", "!=", False),
-            ], order="date_next_tracking_update ASC"
+            ], 
+            order="date_next_tracking_update ASC", 
+            limit=200
         )
 
     def whistl_tracking_state_update_scheduled(self):
