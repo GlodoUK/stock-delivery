@@ -561,11 +561,12 @@ class DeliveryCarrier(models.Model):
                     "not in",
                     ["customer_delivered", "warehouse_delivered"],
                 ),
+                ("create_date", ">=", fields.Datetime.now() - datetime.timedelta(weeks=8)),
                 ("date_next_tracking_update", "<=", fields.datetime.now()),
                 "|",
                 ("carrier_consignment_ref", "!=", False),
                 ("carrier_tracking_ref", "!=", False),
-            ]
+            ], order="date_next_tracking_update ASC"
         )
 
     def whistl_tracking_state_update_scheduled(self):
